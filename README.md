@@ -267,6 +267,9 @@ HTTP `POST /knowledge/search` 在 `filter` 内接受 `excludeDocIds` 和 `titleE
 - 词法检索使用 SQLite FTS5 trigram 索引；向量使用 Float32Array 常驻缓存并精确失效。
 - 旧 JSON 分块数据在首次启动时执行幂等迁移；没有存储后端时自动退化为内存模式。
 - 修改分块或 embedding 配置后，可以重建单条资料或整个知识库的索引。
+- 元数据写入（知识库、文档和全局配置）共用一条写入链；`EPERM`、`EBUSY`、`EACCES` 按 20/50/100/200/400 ms 有界重试，最多写入 6 次。持续 I/O 错误会明确报错并保留之前的元数据。
+- 启动成功加载后，自愈写入失败会警告并跳过其余清理，保留可读取的持久库；后台恢复逐条处理失败，恢复状态写入失败也不会产生未处理的拒绝或中止宿主（#55）。无需格式迁移或禁用 `resumeInterruptedOnStartup`；宿主通用 `rename` 问题仍需上游修复。
+- `knowledge.json` 包含库名、文档记录和配置，不是可随意删除的缓存；仅备份 SQLite 并不完整，备份应同时保留 storage domain 元数据、SQLite 和 `knowledge-raw`。
 
 ---
 

@@ -14,6 +14,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, relative } from 'node:path'
 import { knowledgeDomainSpec, TABLES } from './domain.js'
 import type { ConfigOverrides } from './domain.js'
+import { isMetadataWriteFailure, MetadataWriter } from './metadata-write.js'
 import { ChunkDatabase, hashEmbeddingText, legacyChunkFilePath, migrateLegacyChunkFile, resolveChunkStorePath, searchTextOf, validateDocumentGeneration } from './chunkdb.js'
 import type { RetrievalLane, StagedDocumentGeneration } from './chunkdb.js'
 import type {
@@ -255,7 +256,7 @@ export class DocumentGenerationCommitError extends Error {
  *
  * Falls back to memory only when there is no facility at all (headless runs and
  * tests). Once the durable backend has been opened, a later failure — a failed
- * migration, a locked file, a rejected reconciliation write — throws
+ * migration or an unreadable file — throws
  * {@link StorageUnavailableError} instead of degrading: an in-memory store
  * would show an empty library while the user's data sits safely on disk, and
  * everything written that session would be lost on restart.
@@ -275,18 +276,25 @@ export async function openStore(
     // material store): `<chunkStoreDir>/knowledge-raw`.
     const raw = new RawFileStorage(join(dirname(chunkStorePath), 'knowledge-raw'))
     const store = new DomainStore(domain, chunkDb, raw)
-    await store.recoverDocumentGenerations()
-    // Startup self-healing: drop documents a crashed import left behind
-    // (pure placeholders with no recoverable text), then reconcile stale
-    // chunkCount metadata. Resume candidates (rawText present, chunks
-    // partial) are re-indexed by the service after openStore returns.
-    const recovery = await store.recoverInterruptedImports(Date.now())
-    if (recovery.removed > 0) console.warn(`dsh-knowledge: removed ${recovery.removed} incomplete import(s) left by an interrupted run`)
-    await store.reconcileChunkCounts()
-    const orphaned = await store.reconcileOrphanRaws()
-    if (orphaned > 0) console.warn(`dsh-knowledge: removed ${orphaned} orphaned raw source file(s) no document referenced`)
-    const orphanChunks = await store.reconcileOrphanChunks()
-    if (orphanChunks > 0) console.warn(`dsh-knowledge: removed chunks left by ${orphanChunks} deleted document(s)`)
+    try {
+      await store.recoverDocumentGenerations()
+      // Startup self-healing: drop documents a crashed import left behind
+      // (pure placeholders with no recoverable text), then reconcile stale
+      // chunkCount metadata. Resume candidates (rawText present, chunks
+      // partial) are re-indexed by the service after openStore returns.
+      const recovery = await store.recoverInterruptedImports(Date.now())
+      if (recovery.removed > 0) console.warn(`dsh-knowledge: removed ${recovery.removed} incomplete import(s) left by an interrupted run`)
+      await store.reconcileChunkCounts()
+      const orphaned = await store.reconcileOrphanRaws()
+      if (orphaned > 0) console.warn(`dsh-knowledge: removed ${orphaned} orphaned raw source file(s) no document referenced`)
+      const orphanChunks = await store.reconcileOrphanChunks()
+      if (orphanChunks > 0) console.warn(`dsh-knowledge: removed chunks left by ${orphanChunks} deleted document(s)`)
+    } catch (error) {
+      // Loaded state remains usable. Do not replace it with an empty store or
+      // continue destructive cleanup while metadata reconciliation is pending.
+      if (!isMetadataWriteFailure(error)) throw error
+      console.warn(`dsh-knowledge: startup metadata repair deferred: ${error instanceof Error ? error.message : String(error)}`)
+    }
     return store
   } catch (error) {
     // Close what was already opened — a leaked SQLite handle also keeps the
@@ -296,6 +304,7 @@ export async function openStore(
     } catch {
       // best effort: the original failure is the one worth reporting
     }
+    await domain.close().catch(() => {})
     throw new StorageUnavailableError(
       `knowledge storage could not be opened: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
@@ -304,6 +313,7 @@ export async function openStore(
 }
 
 class DomainStore implements Store {
+  private readonly metadata = new MetadataWriter()
   private documentWriteChain: Promise<void> = Promise.resolve()
   constructor(
     private readonly domain: Domain<typeof knowledgeDomainSpec>,
@@ -328,12 +338,12 @@ class DomainStore implements Store {
   }
 
   putBase(base: KnowledgeBase): Promise<void> {
-    return this.bases.put(base.id, base)
+    return this.metadata.run(() => this.bases.put(base.id, base))
   }
 
   deleteBase(id: string): Promise<void> {
     return this.writeDocuments(async () => {
-      await this.bases.delete(id)
+      await this.metadata.run(() => this.bases.delete(id))
       for (const [, doc] of this.documents.entries()) {
         if (doc.baseId === id) this.chunkDb.discardDocumentGenerations(doc.id)
       }
@@ -363,7 +373,7 @@ class DomainStore implements Store {
       if (pending !== undefined && doc.processing?.revision !== pending.document.processing?.revision) {
         throw new Error('stale_document_generation')
       }
-      await this.documents.put(doc.id, doc)
+      await this.metadata.run(() => this.documents.put(doc.id, doc))
       if (pending !== undefined) this.chunkDb.acknowledgeDocumentGeneration(doc.id)
     })
   }
@@ -372,7 +382,7 @@ class DomainStore implements Store {
     return this.writeDocuments(async () => {
       // Delete the authoritative object first. A crash before journal cleanup
       // is safe: recovery never recreates a missing object.
-      await this.documents.delete(id)
+      await this.metadata.run(() => this.documents.delete(id))
       this.chunkDb.discardDocumentGenerations(id)
     })
   }
@@ -413,7 +423,7 @@ class DomainStore implements Store {
       this.chunkDb.stageDocumentGeneration(doc, chunks)
       this.chunkDb.publishDocumentGeneration(doc, chunks, current.createdAt)
       try {
-        await this.documents.put(doc.id, doc)
+        await this.metadata.run(() => this.documents.put(doc.id, doc))
         this.chunkDb.acknowledgeDocumentGeneration(doc.id)
       } catch (error) { throw new DocumentGenerationCommitError({ cause: error }) }
     })
@@ -434,7 +444,7 @@ class DomainStore implements Store {
           this.chunkDb.discardPublishedGeneration(doc)
           continue
         }
-        await this.documents.put(doc.id, doc)
+        await this.metadata.run(() => this.documents.put(doc.id, doc))
         this.chunkDb.acknowledgeDocumentGeneration(doc.id)
         recovered += 1
       }
@@ -503,6 +513,11 @@ class DomainStore implements Store {
     let removed = 0
     const resume: string[] = []
     for (const [id, doc] of [...this.documents.entries()]) {
+      // SQLite already published this generation. If its metadata acknowledgement
+      // was deferred, the old domain row may still say incomplete; it must not
+      // restart the import or mark the successfully published generation failed.
+      const pending = this.chunkDb.pendingDocumentGeneration(id)
+      if (pending !== undefined && pending.previousCreatedAt === doc.createdAt && pending.document.baseId === doc.baseId) continue
       if (doc.sourceType === 'directory') continue
       // Parsing failed in a completed import. Keep its raw source for an
       // explicit retry, but never re-run a potentially paid processor at boot.
@@ -535,7 +550,7 @@ class DomainStore implements Store {
       // left by a crash mid-import.
       if ((doc.updatedAt ?? doc.createdAt) >= startedAt) continue
       await this.chunkDb.deleteChunks(id)
-      await this.documents.delete(id)
+      await this.metadata.run(() => this.documents.delete(id))
       removed += 1
     }
     return { removed, resume }
@@ -550,7 +565,7 @@ class DomainStore implements Store {
     const actual = this.chunkCountsByDoc(this.listBases().map(base => base.id))
     for (const [id, doc] of [...this.documents.entries()]) {
       if ((doc.chunkCount ?? 0) !== (actual.get(id) ?? 0)) {
-        await this.documents.put(id, { ...doc, chunkCount: actual.get(id) ?? 0 })
+        await this.metadata.run(() => this.documents.put(id, { ...doc, chunkCount: actual.get(id) ?? 0 }))
       }
     }
   }
@@ -615,7 +630,7 @@ class DomainStore implements Store {
   }
 
   async setConfigOverrides(overrides: ConfigOverrides): Promise<void> {
-    await this.writeGlobal({ overrides: { ...this.readGlobal().overrides, ...overrides } })
+    await this.writeGlobal({ overrides })
   }
 
   getGroups(): string[] {
@@ -662,7 +677,8 @@ class DomainStore implements Store {
   private writeGlobal(patch: { overrides?: ConfigOverrides; groups?: string[]; enabled?: boolean; enabledBaseIds?: string[] }): Promise<void> {
     const next = this.globalWriteChain.then(async () => {
       const current = this.readGlobal()
-      await (this.domain.global as { set(value: unknown): Promise<void> }).set({ ...current, ...patch })
+      const next = { ...current, ...patch, overrides: { ...current.overrides, ...patch.overrides } }
+      await this.metadata.run(() => (this.domain.global as { set(value: unknown): Promise<void> }).set(next))
     })
     // Keep the chain usable after a failure: one rejected write must not poison
     // every later settings write.
@@ -672,6 +688,8 @@ class DomainStore implements Store {
 
   async close(): Promise<void> {
     await this.documentWriteChain
+    await this.globalWriteChain
+    await this.metadata.drain()
     this.chunkDb.close()
     await this.domain.close()
   }

@@ -265,6 +265,9 @@ Filters apply only to the current request. No database migration, reindex, or do
 - Lexical retrieval uses a SQLite FTS5 trigram index; vectors use a resident Float32Array cache with precise invalidation.
 - Legacy JSON chunk data is migrated idempotently on first start. The service falls back to memory storage when no persistent backend is available.
 - After changing chunk or embedding settings, rebuild one document or the entire base from the panel or model tools.
+- Metadata writes for bases, documents, and global configuration share one queue. `EPERM`, `EBUSY`, and `EACCES` receive bounded retries after 20/50/100/200/400 ms, for at most six write attempts. Persistent I/O errors are reported and retain the previous metadata.
+- After a successful startup load, a failed self-healing write warns and skips remaining cleanup, keeping the durable library readable. Background recovery handles each document independently; failure to persist recovery state does not cause an unhandled rejection or terminate the host (#55). No format migration or disabling `resumeInterruptedOnStartup` is required; the host's general `rename` issue still needs an upstream fix.
+- `knowledge.json` contains base names, document records, and configuration; do not delete it as disposable cache. A SQLite-only backup is incomplete: retain storage-domain metadata, SQLite, and `knowledge-raw` together.
 
 ---
 
