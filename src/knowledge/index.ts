@@ -409,7 +409,7 @@ export class KnowledgeService extends Service {
         return
       }
       this.ctx.logger.info(`knowledge: resuming ${resumeIds.length} interrupted import(s)`)
-      void this.resumeInterruptedDocuments(resumeIds)
+      this.runBackground('interrupted-import recovery', this.resumeInterruptedDocuments(resumeIds))
     })
     void resume.catch(error => this.ctx.logger.warn(`knowledge: interrupted-import recovery failed: ${error instanceof Error ? error.message : String(error)}`))
     this.armUrlRefreshTimer()
@@ -522,10 +522,19 @@ export class KnowledgeService extends Service {
         this.ctx.logger.warn(`knowledge: interrupted import recovery failed (${processorErrorCode(error)})`)
         // A settled recovery failure must not be selected again on every boot.
         // Keep raw sources/chunks for a manual rebuild, but leave the row failed.
+        // Best-effort: recording the marker writes the same metadata unit whose
+        // failure may have caused the recovery failure in the first place (a
+        // transient Windows EPERM on `tmp + rename`). Letting that write reject
+        // would turn one failed document into a fatal host error, so it must
+        // only warn.
         const current = store.getDocument(id)
         if (current !== undefined) {
-          await store.putDocument({ ...current, incomplete: false, embeddingError: processorErrorMessage(error),
-            errorCode: current.rawText === undefined ? 'parse_failed' : 'embedding_provider', updatedAt: Date.now() })
+          try {
+            await store.putDocument({ ...current, incomplete: false, embeddingError: processorErrorMessage(error),
+              errorCode: current.rawText === undefined ? 'parse_failed' : 'embedding_provider', updatedAt: Date.now() })
+          } catch (markerError) {
+            this.ctx.logger.warn(`knowledge: could not record failed recovery for "${current.title}": ${markerError instanceof Error ? markerError.message : String(markerError)}`)
+          }
         }
       }
     }
@@ -582,6 +591,19 @@ export class KnowledgeService extends Service {
   /** Emit a structured warning on behalf of model-facing retrieval helpers. */
   warn(message: string): void {
     this.ctx.logger.warn(`knowledge: ${message}`)
+  }
+
+  /**
+   * Detach a background task so its rejection can never surface as an
+   * unhandledRejection — the host treats one as a fatal load failure and the
+   * desktop app exits with it. Metadata persistence goes through an atomic
+   * `tmp + rename` unit, which can fail transiently on Windows (`EPERM` while
+   * another handle holds the file); such a failure must degrade to a warning.
+   */
+  private runBackground(label: string, task: Promise<unknown>): void {
+    void task.catch(error => {
+      this.ctx.logger.warn(`knowledge: ${label} failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
   }
 
   /**
@@ -1158,7 +1180,7 @@ export class KnowledgeService extends Service {
       errors: [],
       done: false,
     })
-    void this.runDirectoryImport(jobId, files)
+    this.runBackground('directory import job', this.runDirectoryImport(jobId, files))
     return { jobId, total: files.length }
   }
 
@@ -2359,7 +2381,7 @@ export class KnowledgeService extends Service {
       errors: [],
       done: false,
     })
-    void this.runReindexJob(jobId, baseId)
+    this.runBackground('reindex job', this.runReindexJob(jobId, baseId))
     return { jobId, total: roots.length, documentTotal: documents.length }
   }
 
