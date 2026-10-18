@@ -1442,6 +1442,131 @@ describe('local-path import source tracking', () => {
 })
 
 describe('storage failure reporting', () => {
+  const locked = () => Object.assign(new Error('EPERM: rename knowledge.json'), { code: 'EPERM', syscall: 'rename' })
+
+  it.each(['path', 'upload'] as const)('retains a completed %s import when the base timestamp cannot be saved', async mode => {
+    const dir = await tempDir()
+    const domain = fakeDomain()
+    const ctx = new Context()
+    ctx.provide('webServer', { register: () => () => {} })
+    ctx.provide('storageDomain', { open: async () => domain })
+    const fiber = await ctx.plugin(KnowledgeService, { ...TEST_CONFIG, chunkStorePath: join(dir, 'chunks.sqlite') })
+    const service = ctx.get('knowledge') as KnowledgeService
+    try {
+      const base = await service.createBase({ name: 'imports' })
+      vi.spyOn(domain.table('bases'), 'put').mockRejectedValue(locked())
+      if (mode === 'path') {
+        const source = join(dir, 'notes.txt')
+        await writeFile(source, 'Saved searchable evidence.')
+        await expect(service.importFromPath(base.id, source)).rejects.toMatchObject({ name: 'MetadataWriteError' })
+      } else {
+        await service.addFileDocument({ baseId: base.id, fileName: 'notes.txt', contentBase64: Buffer.from('Saved searchable evidence.').toString('base64') })
+        await service.waitForIdle()
+      }
+      const store = (service as unknown as { store: Store }).store
+      const docs = store.listDocuments(base.id)
+      expect(docs).toHaveLength(1)
+      expect(docs[0].errorCode).toBeUndefined()
+      expect(docs[0].incomplete).toBeUndefined()
+      expect(store.listChunksByDoc(docs[0].id)[0].text).toContain('Saved searchable evidence.')
+      expect(Buffer.from((await store.raw!.read(docs[0].rawFilePath!))!).toString()).toBe('Saved searchable evidence.')
+      expect((await service.search({ baseId: base.id, query: 'searchable evidence' })).hits).toHaveLength(1)
+    } finally {
+      await fiber.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('retries base/document/global primitives and merges concurrent settings after retry', async () => {
+    const dir = await tempDir()
+    const domain = fakeDomain()
+    const store = await openStore({ open: async () => domain } as unknown as StorageDomainFacility, {
+      chunkStorePath: join(dir, 'chunks.sqlite'), legacyJsonPath: join(dir, 'missing.json'),
+    })
+    try {
+      const bases = domain.table('bases')
+      const documents = domain.table('documents')
+      const putBase = vi.spyOn(bases, 'put').mockRejectedValueOnce(locked())
+      await store.putBase({ id: 'b1', name: 'original', description: '', createdAt: 1, updatedAt: 1 })
+      expect(putBase).toHaveBeenCalledTimes(2)
+      const doc: KnowledgeDocument = { id: 'd1', baseId: 'b1', title: 'original', sourceType: 'text', rawText: 'text', charCount: 4, chunkCount: 0, createdAt: 1 }
+      const putDoc = vi.spyOn(documents, 'put').mockRejectedValueOnce(locked())
+      await store.putDocument(doc)
+      expect(putDoc).toHaveBeenCalledTimes(2)
+      const setGlobal = vi.spyOn(domain.global, 'set').mockRejectedValueOnce(locked())
+      await Promise.all([store.setConfigOverrides({ topK: 5 }), store.setConfigOverrides({ chunkSize: 100 }), store.setGroups(['group'])])
+      expect(setGlobal).toHaveBeenCalledTimes(4)
+      expect(store.getConfigOverrides()).toMatchObject({ topK: 5, chunkSize: 100 })
+      expect(store.getGroups()).toEqual(['group'])
+      const deleteDoc = vi.spyOn(documents, 'delete').mockRejectedValueOnce(locked())
+      await store.deleteDocument(doc.id)
+      expect(deleteDoc).toHaveBeenCalledTimes(2)
+      expect(store.getDocument(doc.id)).toBeUndefined()
+      const deleteBase = vi.spyOn(bases, 'delete').mockRejectedValueOnce(locked())
+      await store.deleteBase('b1')
+      expect(deleteBase).toHaveBeenCalledTimes(2)
+    } finally {
+      await store.close()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an exhausted write without changing the document or poisoning later writes', async () => {
+    const dir = await tempDir()
+    const domain = fakeDomain()
+    const store = await openStore({ open: async () => domain } as unknown as StorageDomainFacility, {
+      chunkStorePath: join(dir, 'chunks.sqlite'), legacyJsonPath: join(dir, 'missing.json'),
+    })
+    try {
+      const doc: KnowledgeDocument = { id: 'd1', baseId: 'b1', title: 'original', sourceType: 'text', rawText: 'text', charCount: 4, chunkCount: 0, incomplete: true, createdAt: 1 }
+      await store.putDocument(doc)
+      const put = vi.spyOn(domain.table('documents'), 'put').mockRejectedValue(locked())
+      await expect(store.putDocument({ ...doc, title: 'unsaved' })).rejects.toMatchObject({ name: 'MetadataWriteError' })
+      expect(put).toHaveBeenCalledTimes(6)
+      expect(store.getDocument(doc.id)).toEqual(doc)
+      put.mockRestore()
+      await store.putDocument({ ...doc, title: 'saved' })
+      expect(store.getDocument(doc.id)?.title).toBe('saved')
+    } finally {
+      await store.close()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the durable library readable and defers cleanup when startup metadata repair stays locked', async () => {
+    const dir = await tempDir()
+    const domain = fakeDomain()
+    const path = join(dir, 'chunks.sqlite')
+    const db = new ChunkDatabase(path)
+    db.putChunks([chunk('c1', 'd1', 'b1', 0, 'searchable evidence'), chunk('orphan', 'missing', 'b1', 0, 'retained until repair')])
+    db.close()
+    await domain.table('bases').put('b1', { id: 'b1', name: 'existing library', description: '', createdAt: 1, updatedAt: 1 })
+    await domain.table('documents').put('d1', { id: 'd1', baseId: 'b1', title: 'existing document', sourceType: 'text', charCount: 19, chunkCount: 99, createdAt: 1 })
+    const orphanPath = join(dir, 'knowledge-raw', 'b1', 'orphan.txt')
+    await mkdir(join(dir, 'knowledge-raw', 'b1'), { recursive: true })
+    await writeFile(orphanPath, 'keep until metadata recovery succeeds')
+    const put = vi.spyOn(domain.table('documents'), 'put').mockRejectedValue(locked())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let store: Store | undefined
+    try {
+      store = await openStore({ open: async () => domain } as unknown as StorageDomainFacility, { chunkStorePath: path, legacyJsonPath: join(dir, 'missing.json') })
+      expect(put).toHaveBeenCalledTimes(6)
+      expect(store.listBases()[0].name).toBe('existing library')
+      expect(store.getDocument('d1')?.chunkCount).toBe(99)
+      expect(store.listChunksByDoc('d1')[0].text).toBe('searchable evidence')
+      expect(store.getChunk('orphan')).toBeDefined()
+      expect(existsSync(orphanPath)).toBe(true)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('startup metadata repair deferred'))
+      put.mockRestore()
+      await store.putDocument({ ...store.getDocument('d1')!, chunkCount: 1 })
+      expect(store.getDocument('d1')?.chunkCount).toBe(1)
+    } finally {
+      warn.mockRestore()
+      await store?.close()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('reports storage unavailable instead of substituting an empty in-memory store', async () => {
     const dir = await tempDir()
     try {
