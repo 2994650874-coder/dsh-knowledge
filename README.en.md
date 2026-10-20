@@ -19,6 +19,44 @@ A **knowledge base system** as a standalone, open-source bundle plugin for [Deep
 
 ---
 
+> ### This repository is a personal maintenance fork
+>
+> Upstream: [Soren-ABT/dsh-knowledge](https://github.com/Soren-ABT/dsh-knowledge). Thanks to the original author.
+> This fork is maintained by one person and **only carries changes that serve my own use case**.
+> It does not aim to stay feature-aligned with upstream.
+>
+> **Status**
+>
+> - **May lag behind upstream.** I sync periodically, not on every release.
+> - **Some upstream features may be skipped.** If a change conflicts with my local edits or has no
+>   value for my workflow, I skip it — usually without writing down why, because the criterion is
+>   "do I need it", not "is it good".
+> - **Upstream bug fixes are generally followed**, except changes to startup paths or storage
+>   writes, which I test before merging.
+> - **No backward-compatibility promise.** Local changes serve a personal workflow and may change
+>   at any time.
+>
+> **What this fork changes** (relative to upstream v0.5.2)
+>
+> - **Workspace allow-list**: whether the knowledge base applies is decided by the workspace
+>   directory. The list lives in `knowledge.json` as `workspacePaths`.
+>   `[]` = closed everywhere (fail closed), `["*"]` = all workspaces.
+> - **Three gates**: system-prompt injection / auto-retrieval / tool invocation are all blocked
+>   outside allowed workspaces.
+> - **Workspace dropdown in panel**: the old on/off pill became a workspace-list dropdown.
+>
+> **Why**: upstream applies to every workspace unconditionally. In a coding workspace, the injected
+> knowledge and tool descriptions are pure noise. I want it only where I actually use the knowledge base.
+>
+> **Install**:
+>
+> ```powershell
+> dsh plugin --profile desktop add https://github.com/2994650874-coder/dsh-knowledge.git
+> ```
+>
+> Or clone and install via `link:` (`lib/` is committed, so a clone works without building).
+
+
 ## Why dsh-knowledge
 
 dsh-knowledge brings document ingestion, parsing, chunking, retrieval, evidence composition, and anchored follow-up reading into DSH. It works without vector configuration and can also run with fully local models, without a separate knowledge-base service.
