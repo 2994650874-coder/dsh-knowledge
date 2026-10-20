@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/index.ts"],
+  "sourcesContent": ["/** Host loader entry for the browser implementation exported from `./client`. */\r\n\r\n/** Host plugin body \u2014 no host-side behavior for the knowledge panel. */\r\nexport function apply(): void {}\r\n"],
+  "mappings": ";AAGO,SAAS,QAAc;AAAC;",
+  "names": []
+}

@@ -1,5 +1,7 @@
 node_modules/
-lib/
+# [本地 fork] 上游忽略 lib/（源码仓库不存构建产物），但本 fork 要能 clone 即用，
+# 所以改为跟踪 lib/。重新构建后记得把 lib/ 一并提交。
+# 上游原规则: lib/
 *.tsbuildinfo
 *.tgz
 .DS_Store
