@@ -187,17 +187,20 @@ async function route(
     return service.checkProcessor(body.baseId as string | undefined)
   }
 
-  // /knowledge-toggle (invocation on/off + pinned base scope)
+  // /knowledge-toggle (invocation on/off + pinned base scope + workspace allow-list)
   if (segments[0] === 'knowledge-toggle') {
     if (method === 'GET') {
-      return { enabled: service.isEnabled(), enabledBaseIds: service.getEnabledBaseIds() }
+      return { enabled: service.isEnabled(), enabledBaseIds: service.getEnabledBaseIds(), workspacePaths: service.getWorkspacePaths() }
     }
     if (method === 'PUT') {
       if (typeof body.enabled === 'boolean') await service.setEnabled(body.enabled)
       if (Array.isArray(body.enabledBaseIds)) {
         await service.setEnabledBaseIds(body.enabledBaseIds.filter((id): id is string => typeof id === 'string'))
       }
-      return { enabled: service.isEnabled(), enabledBaseIds: service.getEnabledBaseIds() }
+      if (Array.isArray(body.workspacePaths)) {
+        await service.setWorkspacePaths(body.workspacePaths.filter((p): p is string => typeof p === 'string'))
+      }
+      return { enabled: service.isEnabled(), enabledBaseIds: service.getEnabledBaseIds(), workspacePaths: service.getWorkspacePaths() }
     }
     return undefined
   }

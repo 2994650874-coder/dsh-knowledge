@@ -27,7 +27,25 @@ import type {
   SearchHit,
   SearchMode,
   RerankStatus,
+  KnowledgeToggleState,
 } from './api.js'
+
+/** One registered workspace row for the allow-list popover. */
+export interface WorkspaceEntry {
+  /** Canonical directory path; the gate compares this against the session cwd. */
+  path: string
+  title: string
+}
+
+/** Shape of the host workspace registry (`ctx.workspaces.list.getSnapshot()`). */
+interface HostWorkspacesService {
+  list?: { getSnapshot?: () => { items?: { path?: string; title?: string }[] } }
+}
+
+/** Shape of the host session store (`ctx.sessions.list.getSnapshot()`). */
+interface HostSessionsService {
+  list?: { getSnapshot?: () => { byId?: Record<string, { cwd?: string; retainedBy?: { mainView?: number } }> } }
+}
 import { C, PANEL_CSS, avatarColor, formatRelativeTime, formatSize, style } from './theme.js'
 import {
   chunkPreviewBodyId,
@@ -129,10 +147,22 @@ export function KnowledgePanel(props: {
   store: KnowledgePanelStore
   api: KnowledgeApi
   t: Translate
+  /** Host workspace registry; optional so the panel still opens without it. */
+  workspaces?: HostWorkspacesService
+  /** Host session store; optional so the panel still opens without it. */
+  sessions?: HostSessionsService
 }): JSX.Element | null {
   const open = useSyncExternalStore(props.store.subscribe, props.store.getSnapshot)
   if (!open) return null
-  return <PanelBody api={props.api} t={props.t} onClose={() => props.store.close()} />
+  return (
+    <PanelBody
+      api={props.api}
+      t={props.t}
+      onClose={() => props.store.close()}
+      workspaces={props.workspaces}
+      sessions={props.sessions}
+    />
+  )
 }
 
 type DialogState =
@@ -160,7 +190,13 @@ interface RecallEntry {
   time: number
 }
 
-function PanelBody(props: { api: KnowledgeApi; t: Translate; onClose: () => void }): JSX.Element {
+function PanelBody(props: {
+  api: KnowledgeApi
+  t: Translate
+  onClose: () => void
+  workspaces?: HostWorkspacesService
+  sessions?: HostSessionsService
+}): JSX.Element {
   const titlebarInset = useSyncExternalStore(subscribeTitlebarInset, getTitlebarInset, () => 0)
   const { api, t, onClose } = props
   const [bases, setBases] = useState<BaseSummary[]>([])
@@ -179,7 +215,12 @@ function PanelBody(props: { api: KnowledgeApi; t: Translate; onClose: () => void
   const [detailMode, setDetailMode] = useState<'preview' | 'chunks'>('preview')
   const [checkedDocIds, setCheckedDocIds] = useState<Set<string>>(new Set())
   const [globalConfig, setGlobalConfig] = useState<KnowledgeConfig | null>(null)
-  const [toggle, setToggle] = useState<{ enabled: boolean; enabledBaseIds: string[] } | null>(null)
+  const [toggle, setToggle] = useState<KnowledgeToggleState | null>(null)
+  // Registered workspaces (path + title) for the allow-list popover, plus the
+  // current session's cwd. Both are read from the client host services, so the
+  // gate never needs a second HTTP call to know where it is.
+  const [registryWorkspaces, setRegistryWorkspaces] = useState<WorkspaceEntry[]>([])
+  const [currentPath, setCurrentPath] = useState<string | null>(null)
   const [stats, setStats] = useState<BaseStats | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -265,7 +306,39 @@ function PanelBody(props: { api: KnowledgeApi; t: Translate; onClose: () => void
 
   useEffect(() => { void run(refreshBases) }, [run, refreshBases])
 
-  const updateToggle = useCallback(async (patch: { enabled?: boolean; enabledBaseIds?: string[] }): Promise<void> => {
+  // The invocation gate's popover needs the registered workspaces and the
+  // current session's cwd. Neither travels over `/knowledge/*`, so read them
+  // from the host services handed in by the slot. Both reads are defensive:
+  // a missing service, a gated accessor, or a store mid-reload just leaves the
+  // previous snapshot in place instead of breaking the panel.
+  useEffect(() => {
+    const read = (): void => {
+      const snapshot = props.sessions?.list?.getSnapshot?.()
+      const rows = Object.values(snapshot?.byId ?? {})
+      // The main view holds the session the user is actually talking to;
+      // without one there is no single cwd to judge the gate against.
+      const current = rows.find(row => (row.retainedBy?.mainView ?? 0) > 0)
+      if (typeof current?.cwd === 'string' && current.cwd.length > 0) setCurrentPath(current.cwd)
+    }
+    const items = props.workspaces?.list?.getSnapshot?.()?.items ?? []
+    setRegistryWorkspaces(items
+      .filter(item => typeof item.path === 'string' && item.path.length > 0)
+      .map(item => ({ path: item.path as string, title: item.title ?? item.path as string })))
+    read()
+    // Re-read on workspace changes so a newly added project shows up in the
+    // gate without reopening the panel. A store without subscribe() just
+    // yields a static list, which is still better than nothing.
+    let unsubscribe: (() => void) | undefined
+    try {
+      const subscribe = (props.workspaces?.list as { subscribe?: (fn: () => void) => () => void } | undefined)?.subscribe
+      unsubscribe = subscribe?.call(props.workspaces?.list, read)
+    } catch {
+      unsubscribe = void 0
+    }
+    return unsubscribe
+  }, [props.workspaces, props.sessions])
+
+  const updateToggle = useCallback(async (patch: Partial<KnowledgeToggleState>): Promise<void> => {
     const next = await api.setKnowledgeToggle(patch)
     setToggle(next)
     notify('success', t('save'))
@@ -1341,12 +1414,14 @@ function PanelBody(props: { api: KnowledgeApi; t: Translate; onClose: () => void
         </div>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {toggle !== null && (
-            <KnowledgeToggle
+            <KnowledgeWorkspaceGate
               enabled={toggle.enabled}
               enabledBaseIds={toggle.enabledBaseIds}
-              bases={bases}
+              workspacePaths={toggle.workspacePaths}
+              workspaces={registryWorkspaces}
+              currentPath={currentPath}
               t={t}
-              onChange={(enabled, ids) => void updateToggle({ enabled, enabledBaseIds: ids })}
+              onChangeWorkspacePaths={paths => void updateToggle({ workspacePaths: paths })}
             />
           )}
           <button style={style.closeButton} onClick={onClose} title={t('close')} aria-label={t('close')}>✕</button>
@@ -2345,13 +2420,40 @@ function StatChip(props: { value: string | number; label: string; title?: string
   )
 }
 
-/** Master on/off switch plus per-base scope, mirroring Cherry's composer KB toggle. */
-function KnowledgeToggle(props: {
+/** Per-workspace gate for knowledge-base invocation.
+ *
+ * The native pill used to be a global on/off switch. The gate now lives in a
+ * workspace allow-list, so this popover edits that list: `workspacePaths` holds
+ * canonical directory paths, `[]` closes every workspace (fail closed), and
+ * `["*"]` allows all of them. Unregistered directories can still be typed in
+ * by hand — the gate compares raw cwd strings, not registry membership.
+ */
+/**
+ * Per-workspace gate for knowledge-base invocation.
+ *
+ * The native pill was a global on/off switch; the gate now lives in a durable
+ * workspace allow-list, so this popover edits that list. `workspacePaths` holds
+ * canonical directory paths, `[]` closes every workspace (fail closed) and
+ * `["*"]` allows all of them.
+ *
+ * Three groups, each separated by a rule so the global option never reads as
+ * another workspace in the list:
+ *   1. 所有工作区     — the global switch
+ *   2. 当前工作区     — where the session actually is
+ *   3. 已注册工作区   — every project DSH knows about
+ *
+ * Only registered workspaces and the current cwd can be toggled. A path that is
+ * saved but no longer registered still shows as checked so it can be removed, but
+ * there is no free-form input: the list is a curated set, not an inbox.
+ */
+function KnowledgeWorkspaceGate(props: {
   enabled: boolean
   enabledBaseIds: string[]
-  bases: BaseSummary[]
+  workspacePaths: string[]
+  workspaces: WorkspaceEntry[]
+  currentPath: string | null
   t: Translate
-  onChange: (enabled: boolean, ids: string[]) => void
+  onChangeWorkspacePaths: (paths: string[]) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -2364,67 +2466,120 @@ function KnowledgeToggle(props: {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  const toggleBase = (id: string): void => {
-    let ids: string[]
-    if (props.enabledBaseIds.length === 0) {
-      ids = props.bases.map(b => b.id).filter(x => x !== id)
-    } else if (props.enabledBaseIds.includes(id)) {
-      ids = props.enabledBaseIds.filter(x => x !== id)
-    } else {
-      ids = [...props.enabledBaseIds, id]
-    }
-    props.onChange(props.enabled, ids)
+  const all = props.workspacePaths.length === 1 && props.workspacePaths[0] === '*'
+  const none = props.workspacePaths.length === 0
+  const setAll = (): void => props.onChangeWorkspacePaths(['*'])
+  const togglePath = (path: string): void => {
+    const next = props.workspacePaths.filter(p => p !== '*')
+    props.onChangeWorkspacePaths(next.includes(path) ? next.filter(p => p !== path) : [...next, path])
   }
+  const checked = (path: string): boolean => all || (!none && props.workspacePaths.includes(path))
 
-  const allChecked = props.enabledBaseIds.length === 0
-  const baseChecked = (id: string): boolean => allChecked || props.enabledBaseIds.includes(id)
+  const label = all
+    ? props.t('kbWorkspaceAll')
+    : none
+      ? props.t('kbWorkspaceNone')
+      : `${props.workspacePaths.length} ${props.t('kbWorkspace')}`
+
+  // Saved paths that are no longer registered: shown so they can be cleared,
+  // never silently dropped.
+  const stale = props.workspacePaths.filter(path =>
+    path !== '*'
+    && path !== props.currentPath
+    && !props.workspaces.some(w => w.path === path)
+  )
+
+  // Horizontal rule between groups. Uses the panel border token so it tracks
+  // the theme instead of hard-coding a gray.
+  const rule: CSSProperties = { height: 1, background: C.border, margin: '5px 0' }
+  const rowStyle: CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
+    borderRadius: 7, cursor: 'pointer', fontSize: 13,
+  }
+  const pathText: CSSProperties = {
+    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  }
+  const groupLabel: CSSProperties = {
+    fontSize: 10, color: C.muted, padding: '2px 8px 4px', letterSpacing: 0.4,
+  }
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <button
         className="kb-row"
-        onClick={() => props.onChange(!props.enabled, props.enabledBaseIds)}
-        title={props.enabled ? props.t('kbOff') : props.t('kbOn')}
+        onClick={() => setOpen(v => !v)}
+        title={props.t('kbWorkspaceHint')}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600,
-          color: props.enabled ? C.success : C.muted,
-          border: `1px solid ${props.enabled ? C.success : C.border}`, borderRadius: 999,
-          padding: '3px 10px', background: props.enabled ? 'color-mix(in srgb, var(--dsw-alias-state-success-primary, #30a46c) 12%, transparent)' : 'transparent',
+          // Neutral, panel-matching chip: no state color leaks into the header.
+          color: none ? C.muted : C.text,
+          border: `1px solid ${C.border}`, borderRadius: 999,
+          padding: '3px 10px', background: 'transparent',
           cursor: 'pointer',
         }}
       >
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: props.enabled ? C.success : C.muted }} />
-        {props.t('kbInvocation')} {props.enabled ? props.t('kbOn') : props.t('kbOff')}
+        <span style={{
+          width: 8, height: 8, borderRadius: 999,
+          background: none ? C.borderStrong : C.text,
+        }} />
+        {props.t('kbWorkspace')} · {label}
       </button>
-      {props.enabled && (
-        <button
-          className="kb-row"
-          onClick={() => setOpen(v => !v)}
-          style={{
-            fontSize: 11, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 999,
-            padding: '3px 8px', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          {allChecked ? props.t('kbAll') : `${props.enabledBaseIds.length} ${props.t('kbInvocation')}`} ▾
-        </button>
-      )}
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300, minWidth: 220, maxHeight: 280,
-          overflowY: 'auto', background: C.overlay, border: `1px solid ${C.border}`, borderRadius: 10,
-          boxShadow: '0 10px 32px rgba(0,0,0,0.18)', padding: 6,
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300, minWidth: 300,
+          maxWidth: 440, maxHeight: 360, overflowY: 'auto', background: C.overlay,
+          border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 10px 32px rgba(0,0,0,0.18)', padding: 6,
         }}>
-          <div style={{ fontSize: 11, color: C.muted, padding: '4px 8px' }}>{props.t('kbScopeHint')}</div>
-          <label className="kb-row" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 7, cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={allChecked} onChange={() => props.onChange(props.enabled, [])} />
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{props.t('kbAll')}</span>
+          <div style={{ fontSize: 11, color: C.muted, padding: '4px 8px', lineHeight: 1.5 }}>{props.t('kbWorkspaceHint')}</div>
+
+          {/* 1. 全局开关 */}
+          <label className="kb-row" style={rowStyle}>
+            <input type="checkbox" checked={all} onChange={() => (all ? togglePath('*') : setAll())} />
+            <span style={{ ...pathText, fontWeight: 600 }}>{props.t('kbWorkspaceAll')}</span>
           </label>
-          {props.bases.map(base => (
-            <label key={base.id} className="kb-row" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 7, cursor: 'pointer', fontSize: 13 }}>
-              <input type="checkbox" checked={baseChecked(base.id)} onChange={() => toggleBase(base.id)} />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{base.name}</span>
+          <div style={rule} />
+
+          {/* 2. 当前工作区 */}
+          <div style={groupLabel}>{props.t('kbWorkspaceCurrent')}</div>
+          {props.currentPath !== null ? (
+            <label className="kb-row" style={rowStyle}>
+              <input type="checkbox" checked={checked(props.currentPath)} onChange={() => togglePath(props.currentPath)} />
+              <span style={pathText} title={props.currentPath}>{props.currentPath}</span>
+              {!checked(props.currentPath) && (
+                <span style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>{props.t('kbWorkspaceOff')}</span>
+              )}
+            </label>
+          ) : (
+            <div style={{ fontSize: 11, color: C.muted, padding: '2px 8px 4px' }}>—</div>
+          )}
+          <div style={rule} />
+
+          {/* 3. 已注册工作区 */}
+          <div style={groupLabel}>{props.t('kbWorkspace')}</div>
+          {props.workspaces.length === 0 && (
+            <div style={{ fontSize: 11, color: C.muted, padding: '2px 8px 4px' }}>—</div>
+          )}
+          {props.workspaces.map(w => (
+            <label key={w.path} className="kb-row" style={rowStyle}>
+              <input type="checkbox" checked={checked(w.path)} onChange={() => togglePath(w.path)} />
+              <span style={pathText} title={w.path}>
+                {w.title}
+                <span style={{ color: C.muted, fontSize: 11 }}> · {w.path}</span>
+              </span>
             </label>
           ))}
+          {stale.length > 0 && (
+            <>
+              <div style={rule} />
+              {stale.map(path => (
+                <label key={path} className="kb-row" style={rowStyle}>
+                  <input type="checkbox" checked onChange={() => togglePath(path)} />
+                  <span style={pathText} title={path}>{path}</span>
+                  <span style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>{props.t('kbWorkspaceOff')}</span>
+                </label>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

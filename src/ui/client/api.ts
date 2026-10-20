@@ -375,6 +375,13 @@ interface Envelope<T> {
   error?: { code: string; message: string }
 }
 
+/** Workspace allow-list state returned by `/knowledge-toggle`. */
+export interface KnowledgeToggleState {
+  enabled: boolean
+  enabledBaseIds: string[]
+  /** Workspace paths allowed to invoke the base. `[]` = none; `["*"]` = all. */
+  workspacePaths: string[]
+}
 export class KnowledgeApi {
   private async call<T>(method: string, path: string, body?: unknown, timeoutMs = 60_000): Promise<T> {
     const response = await fetch(`/knowledge${path}`, {
@@ -564,11 +571,11 @@ export class KnowledgeApi {
     return this.call('DELETE', '/groups', { name })
   }
 
-  getKnowledgeToggle(): Promise<{ enabled: boolean; enabledBaseIds: string[] }> {
+  getKnowledgeToggle(): Promise<KnowledgeToggleState> {
     return this.call('GET', '/knowledge-toggle')
   }
 
-  setKnowledgeToggle(patch: { enabled?: boolean; enabledBaseIds?: string[] }): Promise<{ enabled: boolean; enabledBaseIds: string[] }> {
+  setKnowledgeToggle(patch: Partial<KnowledgeToggleState>): Promise<KnowledgeToggleState> {
     return this.call('PUT', '/knowledge-toggle', patch)
   }
 

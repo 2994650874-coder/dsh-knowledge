@@ -634,6 +634,35 @@ export class KnowledgeService extends Service {
     await this.requireStore().setEnabledBaseIds([...new Set(ids)])
   }
 
+  /** Raw saved workspace allow-list; `[]` means nothing is allowed. */
+  getWorkspacePaths(): string[] {
+    return this.requireStore().getWorkspacePaths()
+  }
+
+  async setWorkspacePaths(paths: readonly string[]): Promise<void> {
+    await this.requireStore().setWorkspacePaths([...new Set(paths)])
+  }
+
+  /**
+   * Decide whether the knowledge base may be invoked in `cwd`.
+   *
+   * Fail-closed on every unknown: no cwd, an empty list, a list that names
+   *  no workspace, or a store that is not ready. The single `"*"` entry
+   *  opts a deployment into the old allow-everything behavior.
+   */
+  workspaceAllowed(cwd: string | undefined | null): boolean {
+    if (typeof cwd !== "string" || cwd.length === 0) return false
+    let paths: string[]
+    try {
+      paths = this.requireStore().getWorkspacePaths()
+    } catch {
+      return false
+    }
+    if (paths.length === 0) return false
+    if (paths.some(p => p === "*")) return true
+    return paths.some(p => p === cwd)
+  }
+
   /**
    * Resolve the effective search scope for a model call. `undefined` means no
    * ids were configured (every base); an empty array means a non-empty saved

@@ -321,6 +321,12 @@ export type KnowledgeKey =
   | 'kbOff'
   | 'kbAll'
   | 'kbScopeHint'
+  | 'kbWorkspace'
+  | 'kbWorkspaceAll'
+  | 'kbWorkspaceNone'
+  | 'kbWorkspaceHint'
+  | 'kbWorkspaceCurrent'
+  | 'kbWorkspaceOff'
   | 'dragResize'
   | 'loadMoreChunks'
   | 'timeJustNow'
@@ -716,6 +722,12 @@ export const zh: Record<KnowledgeKey, string> = {
   kbOff: '关',
   kbAll: '全部',
   kbScopeHint: '留空 = 全部库可用',
+  kbWorkspace: '开放工作区',
+  kbWorkspaceAll: '所有工作区',
+  kbWorkspaceNone: '未开放任何工作区',
+  kbWorkspaceHint: "只有在此列表中的工作区可以调用知识库；留空 = 全部关闭。当前工作区不在列表中时不注入、也不允许调用工具。",
+  kbWorkspaceCurrent: '当前工作区',
+  kbWorkspaceOff: '未开放',
   dragResize: '拖动调整宽度',
   loadMoreChunks: '加载更多分块',
   timeJustNow: '刚刚',
@@ -1092,6 +1104,12 @@ export const en: Record<KnowledgeKey, string> = {
   kbOff: 'off',
   kbAll: 'All',
   kbScopeHint: 'Empty = all bases',
+  kbWorkspace: 'Workspaces',
+  kbWorkspaceAll: 'All workspaces',
+  kbWorkspaceNone: 'No workspace allowed',
+  kbWorkspaceHint: "Only these workspaces may invoke the knowledge base; empty = closed everywhere. Outside the list nothing is injected and no tool call is allowed.",
+  kbWorkspaceCurrent: 'Current workspace',
+  kbWorkspaceOff: 'not allowed',
   dragResize: 'Drag to resize',
   loadMoreChunks: 'Load more chunks',
   timeJustNow: 'just now',

@@ -221,8 +221,14 @@ export const knowledgeDomainSpec = defineDomain({
       groups: z.array(z.string()).optional(),
       enabled: z.boolean().optional(),
       enabledBaseIds: z.array(z.string()).optional(),
+      /** Workspace directory paths allowed to invoke the knowledge base.
+       *  Empty array = no workspace is allowed (fail closed). A single `"*"`
+       *  entry means every workspace. Unlike `enabledBaseIds` (empty = all
+       *  bases), emptiness here is the closed state, so "turn it off
+       *  everywhere" stays expressible. */
+      workspacePaths: z.array(z.string()).optional(),
     }),
-    initial: { overrides: {} as ConfigOverrides, enabled: true, enabledBaseIds: [] as string[] },
+    initial: { overrides: {} as ConfigOverrides, enabled: true, enabledBaseIds: [] as string[], workspacePaths: [] as string[] },
   },
   tables: {
     bases: domainTable<string, KnowledgeBase>(baseSchema),

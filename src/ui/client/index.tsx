@@ -28,6 +28,33 @@ interface LocaleService {
   bind(ns: string): (key: string) => string
 }
 
+/** Shape of the host workspace registry consumed by the invocation gate. */
+interface HostWorkspacesService {
+  list?: { getSnapshot?: () => { items?: { workspaceId?: string; path?: string; title?: string }[] } }
+}
+
+/** Shape of the host session store consumed by the invocation gate. */
+interface HostSessionsService {
+  list?: { getSnapshot?: () => { byId?: Record<string, { cwd?: string; retainedBy?: { mainView?: number } }> } }
+}
+
+/** Read `workspaces` without triggering cordis's inject gate (issue #47). */
+function readWorkspaceService(ctx: Context): HostWorkspacesService | undefined {
+  try {
+    return ctx.get('workspaces') as HostWorkspacesService | undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Read `sessions` without triggering cordis's inject gate (issue #47). */
+function readSessionService(ctx: Context): HostSessionsService | undefined {
+  try {
+    return ctx.get('sessions') as HostSessionsService | undefined
+  } catch {
+    return undefined
+  }
+}
 /** Required services; each target slot is awaited through `slots.inject`. */
 export const inject = ['slots', 'locale']
 
@@ -54,7 +81,16 @@ export function apply(ctx: Context): void {
     name: 'shell.overlay',
     id: 'knowledge',
     order: 10,
-    inject: () => ({ store, api, t }),
+    inject: () => ({
+      store,
+      api,
+      t,
+      // Registered workspaces + the live session list, so the invocation
+      // gate popover can list them and show which one the panel is in.
+      // Resolved per render (not captured) because root slot props are cached.
+      workspaces: readWorkspaceService(ctx),
+      sessions: readSessionService(ctx),
+    }),
   }, KnowledgePanel))
 
   slots.inject('settings.section', () => slots.register({

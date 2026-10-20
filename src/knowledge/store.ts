@@ -212,6 +212,10 @@ export interface Store {
   setEnabled(enabled: boolean): Promise<void>
   getEnabledBaseIds(): string[]
   setEnabledBaseIds(ids: string[]): Promise<void>
+  /** Workspace paths allowed to invoke the base. `[]` closes every workspace;
+   *  a single `"*"` allows all. Copied defensively on read. */
+  getWorkspacePaths(): string[]
+  setWorkspacePaths(paths: string[]): Promise<void>
 
   close(): Promise<void>
 }
@@ -642,13 +646,22 @@ class DomainStore implements Store {
     await this.writeGlobal({ enabledBaseIds: ids })
   }
 
-  private readGlobal(): { overrides: ConfigOverrides; groups: string[]; enabled: boolean; enabledBaseIds: string[] } {
-    const global = this.domain.global.get() as { overrides?: ConfigOverrides; groups?: string[]; enabled?: boolean; enabledBaseIds?: string[] }
+  getWorkspacePaths(): string[] {
+    return [...this.readGlobal().workspacePaths]
+  }
+
+  async setWorkspacePaths(paths: string[]): Promise<void> {
+    await this.writeGlobal({ workspacePaths: [...paths] })
+  }
+
+  private readGlobal(): { overrides: ConfigOverrides; groups: string[]; enabled: boolean; enabledBaseIds: string[]; workspacePaths: string[] } {
+    const global = this.domain.global.get() as { overrides?: ConfigOverrides; groups?: string[]; enabled?: boolean; enabledBaseIds?: string[]; workspacePaths?: string[] }
     return {
       overrides: global.overrides ?? {},
       groups: global.groups ?? [],
       enabled: global.enabled ?? true,
       enabledBaseIds: global.enabledBaseIds ?? [],
+      workspacePaths: global.workspacePaths ?? [],
     }
   }
 
@@ -659,7 +672,7 @@ class DomainStore implements Store {
    *  with its own patch). */
   private globalWriteChain: Promise<void> = Promise.resolve()
 
-  private writeGlobal(patch: { overrides?: ConfigOverrides; groups?: string[]; enabled?: boolean; enabledBaseIds?: string[] }): Promise<void> {
+  private writeGlobal(patch: { overrides?: ConfigOverrides; groups?: string[]; enabled?: boolean; enabledBaseIds?: string[]; workspacePaths?: string[] }): Promise<void> {
     const next = this.globalWriteChain.then(async () => {
       const current = this.readGlobal()
       await (this.domain.global as { set(value: unknown): Promise<void> }).set({ ...current, ...patch })
@@ -686,6 +699,7 @@ class MemoryStore implements Store {
   private groups: string[] = []
   private enabled = true
   private enabledBaseIds: string[] = []
+  private workspacePaths: string[] = []
 
   listBases(): KnowledgeBase[] {
     return [...this.bases.values()]
@@ -940,6 +954,14 @@ class MemoryStore implements Store {
 
   async setEnabledBaseIds(ids: string[]): Promise<void> {
     this.enabledBaseIds = [...ids]
+  }
+
+  getWorkspacePaths(): string[] {
+    return [...this.workspacePaths]
+  }
+
+  async setWorkspacePaths(paths: string[]): Promise<void> {
+    this.workspacePaths = [...paths]
   }
 
   async close(): Promise<void> {}

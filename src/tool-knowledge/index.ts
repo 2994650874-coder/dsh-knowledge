@@ -16,6 +16,7 @@ import type { KnowledgeService } from '../knowledge/index.js'
 import type { ContextWindow, SearchHit, SearchResult } from '../knowledge/types.js'
 import type { DocumentEvidence, DocumentProcessingInfo, DocumentSourceSpan } from '../knowledge/processing-types.js'
 import { sourceSpanLabel } from '../knowledge/source-spans.js'
+import { kbAllowedHere } from './kb-gate.js'
 
 /** Hard ceiling for the complete model-visible native search rendering. */
 export const SEARCH_RENDER_MAX_TOKENS = 8192
@@ -286,7 +287,8 @@ export function apply(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'knowledge:usage',
     order: 110,
-    text: () => {
+    text: (context?: { agent?: unknown }) => {
+      if (!kbAllowedHere(knowledge, context?.agent, 'usage-section')) return ''
       if (!knowledge.isEnabled()) return ''
       const bases = scopedBases().filter(base => knowledge.getConfigFor(base.id).injectUsagePrompt !== false)
       if (bases.length === 0) return ''
@@ -299,6 +301,11 @@ export function apply(ctx: Context): void {
   // knowledge_* tool is denied (Cherry's kb_* `applies` gate equivalent).
   ctx.tools.guard((exec) => {
     if (!exec.name.startsWith('knowledge_')) return undefined
+    // Local patch: workspace allow-list. Checked before the master switch so a
+    // closed workspace denies the call even while the panel shows knowledge as on.
+    if (!kbAllowedHere(knowledge, exec.agent, 'guard:' + exec.name)) {
+      return 'knowledge base is not open for this workspace (kb-scope)'
+    }
     if (!knowledge.isEnabled()) return 'knowledge base invocation is turned off; enable it in the knowledge panel first'
     return undefined
   })
@@ -1082,6 +1089,9 @@ export function apply(ctx: Context): void {
   // nothing; failures are swallowed and never break the step.
   ctx.on('agent/pre-step', async ({ agent, messages, signal }, next) => {
     const decision = await next()
+    // Local patch: workspace allow-list. A closed workspace must not even pay
+    // for auto-retrieval, so the gate runs before any query planning.
+    if (!kbAllowedHere(knowledge, agent, 'pre-step')) return decision
     if (decision.kind === 'reject' || decision.messages.length === 0 || signal.aborted) return decision
     const text = userTextOf(messages)
     if (text.length === 0) return decision
