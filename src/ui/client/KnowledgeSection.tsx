@@ -2511,23 +2511,27 @@ function KnowledgeWorkspaceGate(props: {
         title={props.t('kbWorkspaceHint')}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600,
-          // Neutral, panel-matching chip: no state color leaks into the header.
-          color: none ? C.muted : C.text,
-          border: `1px solid ${C.border}`, borderRadius: 999,
-          padding: '3px 10px', background: 'transparent',
+          // Red when the list is empty (nothing may invoke knowledge), green as
+          // soon as at least one workspace is open. The dot mirrors the same state.
+          color: none ? C.danger : C.success,
+          border: `1px solid ${none ? C.danger : C.success}`, borderRadius: 999,
+          padding: '3px 10px',
+          background: none
+            ? 'transparent'
+            : 'color-mix(in srgb, var(--dsw-alias-state-success-primary, #30a46c) 12%, transparent)',
           cursor: 'pointer',
         }}
       >
         <span style={{
           width: 8, height: 8, borderRadius: 999,
-          background: none ? C.borderStrong : C.text,
+          background: none ? C.danger : C.success,
         }} />
         {props.t('kbWorkspace')} · {label}
       </button>
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300, minWidth: 300,
-          maxWidth: 440, maxHeight: 360, overflowY: 'auto', background: C.overlay,
+          maxWidth: 440, maxHeight: 360, overflowY: 'auto', background: C.surface,
           border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 10px 32px rgba(0,0,0,0.18)', padding: 6,
         }}>
           <div style={{ fontSize: 11, color: C.muted, padding: '4px 8px', lineHeight: 1.5 }}>{props.t('kbWorkspaceHint')}</div>
