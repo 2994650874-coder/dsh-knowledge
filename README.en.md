@@ -54,7 +54,12 @@ A **knowledge base system** as a standalone, open-source bundle plugin for [Deep
 > dsh plugin --profile desktop add https://github.com/2994650874-coder/dsh-knowledge.git
 > ```
 >
-> Or clone and install via `link:` (`lib/` is committed, so a clone works without building).
+> **Do not install via `link:`** — this plugin has 6 host-provided dependencies
+> (`@deepseek-ai/*`, `zod`, `jszip`, `undici`) that cannot be resolved from a linked
+> location; the knowledge base returns 404. Use the standard install above.
+>
+> `lib/` is committed, so a clone needs **no build**, but it **does** need `pnpm install`
+> for the runtime dependencies. See [README.fork.md](./README.fork.md) section 6.
 
 
 ## Why dsh-knowledge

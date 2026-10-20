@@ -228,7 +228,66 @@ API 调用同理：`curl -x http://127.0.0.1:7897 -H "Authorization: Bearer <tok
 
 ---
 
-## 六、回滚到上游原样
+## 六、重装 / 换机器后怎么恢复
+
+### 结论先说
+
+**这个仓库是「源码 + 构建产物」的备份，不是「可直接运行」的备份。**
+clone 下来还需要装依赖才能用。
+
+### 不会带过来的东西
+
+| 内容 | 在哪 | 会丢吗 |
+|---|---|---|
+| 知识库文档与向量（22 MB+） | `~/.dsh/storages/knowledge*.sqlite`、`knowledge.json` | ✅ 会丢（不在仓库里） |
+| 原始文件 | `~/.dsh/storages/knowledge-raw/` | ✅ 会丢 |
+| 15 个运行时依赖（625 MB） | `node_modules/` | ✅ 会丢（gitignore） |
+| 我们的代码改动 | `lib/` | ❌ 不会丢（已提交） |
+
+> 知识库内容是空的，需要重新建库、导入文档、勾选工作区。这是正常的干净状态。
+
+### 恢复流程
+
+```powershell
+# 1. clone
+git -c http.proxy=http://127.0.0.1:7897 -c http.sslBackend=openssl clone `
+  https://github.com/2994650874-coder/dsh-knowledge.git
+cd dsh-knowledge
+
+# 2. 装运行时依赖（625 MB，首次较慢）
+pnpm install
+
+# 3. 装进 profile（用标准安装，不要 link —— 见 §八）
+dsh plugin --profile desktop add <此目录的绝对路径>
+
+# 4. 重启 DSH
+```
+
+### ⚠️ 为什么不要用 link
+
+本插件 bundle 里有 6 个 external 裸 specifier（`@deepseek-ai/cordis`、
+`@deepseek-ai/dsh-storage-domain`、`@deepseek-ai/dsh-tools`、`zod`、`jszip`、`undici`），
+运行时由**宿主**提供。
+
+`link:` 会把插件搬到 `~/.dsh/plugin-src/`，那里向上查找**看不到** profile 的
+`node_modules`，6 个依赖全部解析失败 → `knowledge` 服务起不来 → 所有
+`/knowledge/*` 返回 **404**。
+
+2026-10-20 实测踩过，已回退。**用标准安装**，跟上游作者的方式一致。
+
+### 验证恢复成功
+
+```powershell
+# 1. 闸门在不在（我们的改动）
+Select-String -Path "C:\Users\猫猫\.dsh\profiles\desktop\node_modules\dsh-knowledge\lib\tool-knowledge\index.js" -Pattern "kbAllowedHere"
+
+# 2. 服务活着（应返回 JSON，不是 404）
+Invoke-WebRequest "http://127.0.0.1:<端口>/knowledge/stats" -UseBasicParsing
+
+# 3. 面板能打开，工作区下拉可用
+```
+
+## 七、回滚到上游原样
 
 ```powershell
 cd C:\Users\猫猫\.dsh\plugin-src\dsh-knowledge
@@ -246,7 +305,7 @@ git clone -c http.proxy=http://127.0.0.1:7897 -c http.sslBackend=openssl `
 
 ---
 
-## 七、上游通知机制
+## 八、上游通知机制
 
 ### fork 了，作者会收到通知吗
 
@@ -265,7 +324,7 @@ git clone -c http.proxy=http://127.0.0.1:7897 -c http.sslBackend=openssl `
 
 ---
 
-## 八、许可证
+## 九、许可证
 
 本分支继承上游 **AGPL-3.0**。分发（含通过网络提供服务）须同样开源。
 详见 [LICENSE](./LICENSE)。

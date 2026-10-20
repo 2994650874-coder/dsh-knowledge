@@ -50,7 +50,11 @@
 > dsh plugin --profile desktop add https://github.com/2994650874-coder/dsh-knowledge.git
 > ```
 >
-> 或 clone 后 `link:` 安装（`lib/` 已随仓库提交，clone 即可用，无需构建）。
+> **不要用 `link:` 安装** —— 本插件有 6 个 `@deepseek-ai/*` / `zod` / `jszip` / `undici`
+> 等宿主依赖，link 后解析不到，知识库会 404。必须用上面的标准安装方式。
+>
+> `lib/` 已随仓库提交，所以 clone 下来**不需要构建**，但**需要 `pnpm install` 装运行时依赖**。
+> 详见 [README.fork.md](./README.fork.md) §六「重装 / 换机器后怎么恢复」。
 
 
 ## 为什么选择 dsh-knowledge
