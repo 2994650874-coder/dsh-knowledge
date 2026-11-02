@@ -53,6 +53,22 @@ Copy-Item ".\lib\*" "C:\Users\猫猫\.dsh\profiles\desktop\node_modules\dsh-know
 > **`build.mjs` 的 tsc 步骤会失败**（`typescript` 未安装），但 **JS 产物正常生成**。
 > 只有 `lib/types/` 停在旧版，不影响运行。要修就 `npm i -D typescript`。
 
+### ⚠️ 每次改代码必须更新 `LOCAL_MODIFIED`
+
+```ts
+// src/ui/client/build-info.ts
+export const LOCAL_MODIFIED = '2026-11-02'   // ← 改成当天日期，和代码同一次提交
+```
+
+面板标题「知识库」后面的胶囊会显示 `v0.5.2 · 本地改 2026-11-02`。
+
+**为什么必须改**：本 fork 的版本号跟上游一致，光看版本号看不出 `lib/` 是不是本地的。
+上游更新或 `dsh plugin update` 会覆盖 `lib/`，此时**版本号可能没变，但补丁已经没了**。
+
+**判据**：胶囊上的日期不是你最后一次改动的日期 → `lib/` 已被覆盖，重新构建部署。
+
+版本号那半边是 `build.mjs` 从 `package.json` 经 esbuild `define` 注入的，**不用手改**。
+
 ### 提交
 
 ```powershell
@@ -129,32 +145,30 @@ node --check lib/knowledge/index.js
 node --check lib/tool-knowledge/index.js
 node --check lib/client.js
 
-# 2. 闸门还在不在
-Select-String -Path lib/tool-knowledge/index.js -Pattern "kbAllowedHere"
+# 2. 合并综合检测（33 项：本地改动存活 + 上游生效 + 无冲突残留 + 铁律8）
+node F:\知识库架构\工程区\dsh-knowledge\仿真测试\check-merge.mjs
 
 # 3. 部署 + 重启 + 四工作区实测，看探针
 Get-Content C:\Users\猫猫\.dsh\kb-scope-whitelist.probe.log -Tail 20
 ```
 
-### 实战案例：2026-10-20 合并 upstream（issue #55）
+### ⚠️ 自动合并成功 ≠ 语义正确
 
-**背景**：fork 刚建好就发现上游多了 3 个提交（修 issue #55 元数据写入容错）。
+git 只保证**文本层面**没打架。
 
-```
-上游改动: CHANGELOG.md, README*, src/knowledge/index.ts, metadata-write.ts(新),
-          src/knowledge/store.ts, tests/*（5 个新测试）
-我们改动: src/knowledge/{domain,http,index,store}.ts, src/tool-knowledge/*, src/ui/client/*
-交集    : src/knowledge/index.ts, src/knowledge/store.ts   ← 重点关注
-```
+判据：合并后必须逐项确认**本地符号还在**，不能只看「没报冲突」。
+最省事的做法是跑 `check-merge.mjs` —— 它把「本地改动的 8 个符号还在不在」
+「上游的 8 个新符号生效没」都写成硬断言，比人工 grep 可靠。
 
-结果：**自动合并成功，零冲突**（位置不重叠）。但**没有合进主线** ——
-因为触碰了启动路径 + 存储写入语义，属于需要实测的改动。
+### 已知的重叠文件（合并时重点看）
 
-留档分支：`try-upstream-merge-20261020`。
+| 文件 | 本地改 | 上游改 |
+|---|---|---|
+| `src/knowledge/store.ts` | `Store` 接口 + `MemoryStore`（工作区白名单） | `openStore` + `DomainStore` 写入路径（metadata 串行化） |
+| `src/knowledge/index.ts` | `workspaceAllowed` + getter | `resumeInterruptedDocuments` 错误处理 |
+| `README.md` / `README.en.md` | fork 声明 | 版本表 |
 
-> 教训：**git 说"自动合并成功"只代表文本没打架，不代表语义没变。**
-> 上游改了 `store.ts` 17 处（含写入失败语义），本地改 5 处（字段读写），
-> 位置同区域但能自动合并 —— 这种情况必须人工确认行为，光查符号在不在不够。
+> 这三处两边都改，但改动**区域不重叠**，实测可零冲突合并。合完仍要验语义。
 
 ---
 
