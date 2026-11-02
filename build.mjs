@@ -20,6 +20,14 @@ import { fileURLToPath } from 'node:url'
 
 const PACKAGE_ID = 'dsh-knowledge'
 
+// The panel header shows the version, so read it from the manifest rather than
+// duplicating the number in source. The value reaches the client bundle through
+// esbuild `define`, so it is baked at build time — a stale `lib/` cannot claim a
+// version it was not built from.
+const PACKAGE_VERSION = JSON.parse(
+  await readFile(new URL('package.json', import.meta.url), 'utf8'),
+).version
+
 mkdirSync('lib', { recursive: true })
 
 // Incremental local builds must not pack retired thread entry points.
@@ -150,6 +158,7 @@ await build({
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
+    __KB_LOCAL_VERSION__: JSON.stringify(PACKAGE_VERSION),
   },
   banner: {
     js: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => {\nvar module = { exports: {} };\n`,

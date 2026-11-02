@@ -123,6 +123,16 @@ export const style = {
   } as CSSProperties,
   headerLeft: { display: 'flex', alignItems: 'center', gap: 10 } as CSSProperties,
   headerTitle: { fontSize: 15, fontWeight: 600 } as CSSProperties,
+  // Local-fork provenance pill: sits after the title, deliberately quiet so it
+  // reads as a footnote rather than a status light. Dashed border marks it as
+  // non-interactive metadata, unlike the solid-bordered buttons beside it.
+  headerVersionPill: {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    fontSize: 11, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+    color: C.muted, background: 'transparent',
+    border: `1px dashed ${C.border}`, borderRadius: 999, padding: '3px 7px',
+    whiteSpace: 'nowrap', userSelect: 'text',
+  } as CSSProperties,
   headerActions: { display: 'flex', alignItems: 'center', gap: 6 } as CSSProperties,
   iconButton: {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
