@@ -17,6 +17,8 @@ import type { ContextWindow, SearchHit, SearchResult } from '../knowledge/types.
 import type { DocumentEvidence, DocumentProcessingInfo, DocumentSourceSpan } from '../knowledge/processing-types.js'
 import { sourceSpanLabel } from '../knowledge/source-spans.js'
 import { kbAllowedHere } from './kb-gate.js'
+import { createWorkspaceToolGate } from './workspace-tools-gate.js'
+import { wireWorkspaceToolGate } from './workspace-tools-wiring.js'
 
 /** Hard ceiling for the complete model-visible native search rendering. */
 export const SEARCH_RENDER_MAX_TOKENS = 8192
@@ -282,6 +284,19 @@ export function apply(ctx: Context): void {
     return document
   }
 
+  // Highest layer of the workspace gate: a closed workspace stops receiving the
+  // eight knowledge tool schemas at all, which is worth about 2.0k tokens per
+  // request. The other three sites (`usage-section`, `pre-step`, `guard:`) keep
+  // their own independent checks: this one only removes the schemas, and a real
+  // invocation still has to pass the guard.
+  wireWorkspaceToolGate(
+    ctx,
+    createWorkspaceToolGate({
+      allowedHere: (agent, site) => kbAllowedHere(knowledge, agent, site),
+      onFailure: (message, error) => ctx.logger.error('[knowledge] ' + message, error),
+    }),
+  )
+
   // Search guidance lives in the tool description. This optional section only
   // supplies base names, which the tool schema cannot know at registration.
   ctx.systemPrompt.section({
@@ -543,75 +558,6 @@ export function apply(ctx: Context): void {
   }))
 
   ctx.tools.register(defineTool({
-    name: 'knowledge_create_base',
-    description: 'Create a new, empty knowledge base.',
-    parameters: {
-      name: { type: 'string', required: true, description: 'Short name for the knowledge base.' },
-      description: { type: 'string', description: 'Optional description of what it holds.' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          id: { type: 'string', required: true },
-          name: { type: 'string', required: true },
-        },
-      },
-      render: (_args, value: { id: string; name: string }) => modelText(`created knowledge base "${value.name}" (id ${value.id})`),
-    },
-    async execute(args) {
-      const base = await knowledge.createBase({ name: args.name, description: args.description })
-      return { id: base.id, name: base.name }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_delete_base',
-    description: 'Delete a knowledge base and every document and chunk it contains. This is irreversible.',
-    parameters: {
-      baseId: { type: 'string', required: true, description: 'Knowledge base id to delete.' },
-    },
-    output: {
-      schema: { type: 'object', additionalProperties: false, properties: { deleted: { type: 'boolean', required: true } } },
-      render: () => [{ type: 'text', text: 'deleted knowledge base' }],
-    },
-    async execute(args) {
-      requireBaseEnabled(args.baseId)
-      await knowledge.deleteBase(args.baseId)
-      return { deleted: true }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_add_document',
-    description: 'Add a document to a knowledge base from raw text. '
-      + 'The text is chunked and embedded (when configured) automatically.',
-    parameters: {
-      baseId: { type: 'string', required: true, description: 'Target knowledge base id.' },
-      title: { type: 'string', required: true, description: 'Document title.' },
-      content: { type: 'string', required: true, description: 'Full document text.' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          id: { type: 'string', required: true },
-          title: { type: 'string', required: true },
-          chunkCount: { type: 'number', required: true },
-        },
-      },
-      render: (_args, value: { title: string; chunkCount: number }) => modelText(`added document "${value.title}" (${value.chunkCount} chunks)`),
-    },
-    async execute(args) {
-      requireBaseEnabled(args.baseId)
-      const doc = await knowledge.addTextDocument({ baseId: args.baseId, title: args.title, content: args.content })
-      return { id: doc.id, title: doc.title, chunkCount: doc.chunkCount }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
     name: 'knowledge_list_documents',
     description: 'List the documents inside one knowledge base.',
     parameters: {
@@ -655,84 +601,6 @@ export function apply(ctx: Context): void {
           charCount: doc.charCount,
         })),
       }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_delete_document',
-    description: 'Delete one document (and its chunks) from a knowledge base. Deleting a non-empty directory requires recursive=true.',
-    parameters: {
-      baseId: { type: 'string', required: true, description: 'Knowledge base id (used for validation).' },
-      documentId: { type: 'string', required: true, description: 'Document id to delete.' },
-      recursive: { type: 'boolean', description: 'Required only when deleting a non-empty directory and all of its descendants.' },
-    },
-    output: {
-      schema: { type: 'object', additionalProperties: false, properties: { deleted: { type: 'boolean', required: true } } },
-      render: () => [{ type: 'text', text: 'deleted document' }],
-    },
-    async execute(args) {
-      const doc = requireDocumentEnabled(args.documentId)
-      if (doc.baseId !== args.baseId) {
-        throw new Error(`document "${doc.title}" does not belong to knowledge base ${args.baseId}`)
-      }
-      await knowledge.deleteDocument(args.documentId, { recursive: args.recursive === true })
-      return { deleted: true }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_import_url',
-    description: 'Import a document into a knowledge base from a URL. '
-      + 'The page is fetched, its text extracted, then chunked and embedded automatically.',
-    parameters: {
-      baseId: { type: 'string', required: true, description: 'Target knowledge base id.' },
-      url: { type: 'string', required: true, description: 'The URL to fetch and import.' },
-      title: { type: 'string', description: 'Optional title (defaults to the page title or the URL).' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          id: { type: 'string', required: true },
-          title: { type: 'string', required: true },
-          chunkCount: { type: 'number', required: true },
-        },
-      },
-      render: (_args, value: { title: string; chunkCount: number }) => modelText(`imported "${value.title}" (${value.chunkCount} chunks)`),
-    },
-    async execute(args) {
-      requireBaseEnabled(args.baseId)
-      const doc = await knowledge.addUrlDocument({ baseId: args.baseId, url: args.url, title: args.title })
-      return { id: doc.id, title: doc.title, chunkCount: doc.chunkCount }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_refresh_url',
-    description: 'Re-fetch a URL document from its origin and update its snapshot in place. '
-      + 'Use when a page you imported earlier has changed and the knowledge base should reflect the new content. '
-      + 'Returns changed=false when the page is unchanged.',
-    parameters: {
-      documentId: { type: 'string', required: true, description: 'Id of the URL document to refresh.' },
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          changed: { type: 'boolean', required: true },
-          title: { type: 'string', required: true },
-          chunkCount: { type: 'number', required: true },
-        },
-      },
-      render: (_args, value: { changed: boolean; title: string; chunkCount: number }) => modelText(value.changed
-          ? `refreshed "${value.title}" (${value.chunkCount} chunks)`
-          : `"${value.title}" is unchanged`),
-    },
-    async execute(args) {
-      requireDocumentEnabled(args.documentId)
-      return knowledge.refreshUrlDocument(args.documentId)
     },
   }))
 
@@ -986,26 +854,6 @@ export function apply(ctx: Context): void {
       }
       const reindexed = await knowledge.reindexDocument(args.documentId, { mode: args.mode })
       return { id: reindexed.id, title: reindexed.title, chunkCount: reindexed.chunkCount }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'knowledge_reindex_base',
-    description: 'Re-chunk and re-embed every document in a knowledge base using the current configuration. '
-      + 'Use after changing the chunk size or the embedding provider.',
-    parameters: {
-      baseId: { type: 'string', required: true, description: 'Knowledge base id to reindex.' },
-    },
-    output: {
-      schema: { type: 'object', additionalProperties: false, properties: { reindexed: { type: 'number', required: true } } },
-      render: (_args, value: { reindexed: number }) => [
-        { type: 'text', text: `reindexed ${value.reindexed} document(s)` },
-      ],
-    },
-    async execute(args) {
-      requireBaseEnabled(args.baseId)
-      const result = await knowledge.reindexBase(args.baseId)
-      return { reindexed: result.reindexed }
     },
   }))
 
