@@ -109,6 +109,36 @@ describe('generation staging and atomic publication', () => {
     await expect(fixture.store.commitDocumentGeneration(nextDocument, [newChunk])).rejects.toThrow('target_missing')
   })
 
+  it('keeps a published generation readable when its startup metadata acknowledgement is locked', async () => {
+    const fixture = await storage()
+    const interrupted = { ...document, incomplete: true }
+    fixture.documents.set(document.id, interrupted)
+    const locked = Object.assign(new Error('EPERM: rename knowledge.json'), { code: 'EPERM', syscall: 'rename' })
+    fixture.documentPut.mockRejectedValue(locked)
+    await expect(fixture.store.commitDocumentGeneration(nextDocument, [newChunk])).rejects.toMatchObject({ published: true })
+    await fixture.store.close()
+    stores.splice(stores.indexOf(fixture.store), 1)
+    fixture.documentPut.mockClear()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const reopened = await openStore(fixture.facility, fixture.options)
+      stores.push(reopened)
+      expect(fixture.documentPut).toHaveBeenCalledTimes(6)
+      expect(fixture.documents.get(document.id)).toEqual(interrupted)
+      expect(reopened.getDocument(document.id)).toEqual(nextDocument)
+      expect(reopened.listChunksByDoc(document.id)).toEqual([newChunk])
+      expect((await reopened.recoverInterruptedImports(Date.now())).resume).toEqual([])
+      expect((await reopened.retrievalLane!.lexical('new', [base.id], 10)).hits[0].id).toBe(newChunk.id)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('startup metadata repair deferred'))
+      fixture.documentPut.mockImplementation(async (id, doc) => { fixture.documents.set(id, doc) })
+      expect(await reopened.recoverDocumentGenerations()).toBe(1)
+      expect(fixture.documents.get(document.id)).toEqual(nextDocument)
+      expect(await reopened.recoverDocumentGenerations()).toBe(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('rejects stale metadata writes while a published generation is pending', async () => {
     const fixture = await storage()
     fixture.documentPut.mockRejectedValueOnce(new Error('simulated disk error'))

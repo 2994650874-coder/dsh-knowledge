@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix #55: serialize all DomainStore metadata writes for bases, documents, and global configuration. Retry `EPERM`, `EBUSY`, and `EACCES` after 20/50/100/200/400 ms (at most six write attempts); report persistent I/O failures and retain the previous metadata instead of claiming success.
+- Keep a successfully loaded durable library readable when a startup self-healing write fails: warn and skip remaining cleanup. Isolate background recovery failures per document and handle failed recovery-state writes without unhandled rejections or host termination.
+- No storage-format migration or disabling `resumeInterruptedOnStartup` is required. This mitigates knowledge metadata failures; the host's general `rename` issue remains upstream.
+- Clarify that `knowledge.json` contains base names, document records, and configuration, not disposable cache. Back up storage-domain metadata, SQLite, and `knowledge-raw` together; SQLite alone is not a complete backup.
+
 ## 0.5.2 — 2026-10-10 — Unicode safety, settings recovery and dependency security
 
 - Fix #51: preserve surrogate pairs when trimming retrieval evidence, document reads, evidence continuations and source labels. Replace existing lone surrogates with U+FFFD in retrieval injection, tool renderings, the knowledge-base usage prompt, and embedding/rerank inputs; retain stored text and UTF-16 offsets. Existing poisoned session history is not rewritten automatically.
