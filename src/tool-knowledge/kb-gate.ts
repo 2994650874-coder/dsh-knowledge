@@ -9,10 +9,11 @@
  *
  * Every decision is appended to `<DSH_HOME>/kb-scope-whitelist.probe.log` as one
  * JSON line so a wrong gate can be diagnosed after the fact. The probe is
- * best-effort: a failed append never breaks the gate itself.
+ * best-effort: a failed append never breaks the gate itself. The file rotates to
+ * `.1` at 100 MB (see {@link KB_PROBE_MAX_BYTES}), so it cannot grow without bound.
  */
 
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { KnowledgeService } from '../knowledge/index.js'
@@ -20,6 +21,22 @@ import type { KnowledgeService } from '../knowledge/index.js'
 const KB_SEP = String.fromCharCode(92)
 
 const KB_PROBE_LOG = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'kb-scope-whitelist.probe.log')
+
+/**
+ * Rotate the probe log once it grows past this size.
+ *
+ * The probe appends on every gate decision — several thousand lines a day at this
+ * machine's usage — and nothing else trims it. 100 MB is roughly three months of
+ * history: far more than any diagnosis needs, while still bounding the file. On
+ * rotation the current file becomes `<log>.1` and the previous `.1` is dropped, so
+ * exactly two generations exist.
+ */
+const KB_PROBE_MAX_BYTES = 100 * 1024 * 1024
+
+/** Rotation is checked once per this many appends, so it costs no stat per call. */
+const KB_PROBE_CHECK_EVERY = 200
+
+let kbProbeAppends = 0
 
 /** Normalize a directory path to `\\`-separated, no trailing separator, lowercase. */
 function kbNormPath(value: unknown): string {
@@ -41,6 +58,38 @@ function kbSafeCwd(agent: unknown): string | null {
   }
 }
 
+/**
+ * Rotate `path` to `path.1` once it exceeds {@link KB_PROBE_MAX_BYTES}.
+ *
+ * Best-effort like the rest of the probe: any failure leaves the current file in
+ * place and never touches the gate's decision.
+ */
+function kbRotateProbeIfNeeded(path: string): void {
+  try {
+    kbProbeAppends += 1
+    if (kbProbeAppends % KB_PROBE_CHECK_EVERY !== 0) return
+    let size: number
+    try {
+      size = statSync(path).size
+    } catch {
+      return // no file yet
+    }
+    if (size < KB_PROBE_MAX_BYTES) return
+    try {
+      rmSync(path + '.1', { force: true })
+    } catch {
+      // A locked previous generation must not block this rotation.
+    }
+    try {
+      renameSync(path, path + '.1')
+    } catch {
+      // Keep the oversized file rather than lose the newest tail.
+    }
+  } catch {
+    // Observability must never affect the gate.
+  }
+}
+
 function kbProbe(site: string, agent: unknown, result: boolean, detail: string): void {
   try {
     const cwd = kbSafeCwd(agent)
@@ -52,6 +101,7 @@ function kbProbe(site: string, agent: unknown, result: boolean, detail: string):
       result,
       detail,
     })
+    kbRotateProbeIfNeeded(KB_PROBE_LOG)
     try {
       appendFileSync(KB_PROBE_LOG, row + String.fromCharCode(10))
     } catch {
