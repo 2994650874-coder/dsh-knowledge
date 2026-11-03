@@ -46,7 +46,6 @@ interface HostSessionsService {
   list?: { getSnapshot?: () => { byId?: Record<string, { cwd?: string; retainedBy?: { mainView?: number } }> } }
 }
 import { C, PANEL_CSS, avatarColor, formatRelativeTime, formatSize, style } from './theme.js'
-import { KB_LOCAL_VERSION, localMarkLabel } from './build-info.js'
 import { CHANGELOG } from './changelog.js'
 import {
   chunkPreviewBodyId,
@@ -1496,12 +1495,7 @@ function PanelBody(props: {
         <div style={style.headerLeft}>
           <IconBook size={20} color={C.accent} />
           <span style={style.headerTitle}>{t('nav')}</span>
-          {/* Local-fork provenance. Says this build carries local changes and
-              when the newest one landed, so an upstream update that silently
-              overwrote `lib/` shows up as a stale date. */}
-          <span style={style.headerVersionPill} title={localMarkLabel()}>
-            v{KB_LOCAL_VERSION} · {localMarkLabel()}
-          </span>          {busy && (
+          {busy && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.muted }}>
               <span className="kb-spinner" style={style.spinner} />{t('processing')}
             </span>

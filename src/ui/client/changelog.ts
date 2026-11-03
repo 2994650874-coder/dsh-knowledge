@@ -6,10 +6,12 @@
  * it with the fork's own history — what was changed locally and why — which is
  * the one thing a user opening this page with nothing selected might want.
  *
- * **Maintenance contract**: every local change appends one entry, newest first,
- * same day as the `LOCAL_MODIFIED` bump (build-info.ts) and the manual's
- * appendix A. Grouped by area, not by build; an entry says what changed and
- * what the user can observe, never how it was discovered.
+ * **Maintenance contract**: every local change appends one entry at the TOP of
+ * `CHANGELOG`, same day as the manual's appendix A. This array is the single
+ * source of truth for "what changed and when" — the panel header no longer
+ * carries a separate build/date pill, so nothing else needs a matching date.
+ * An entry says what changed and what the user can observe, never how it was
+ * discovered.
  *
  * @module dsh-knowledge/client/changelog
  */
@@ -33,9 +35,16 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: '2026-11-03',
     area: '面板',
-    title: '打开与关闭都有位移动画',
-    detail: '页面从左侧推入；点侧栏按钮关闭时向左滑出，不再瞬间消失。',
-    effect: '进场 240ms、出场 110ms；系统开启「减少动态效果」时两者都关闭。',
+    title: '标题栏去掉版本标签',
+    detail: '面板标题后面不再显示「v0.5.2 · 本地改 日期」。',
+    effect: '改动内容统一看这一页，标题栏只留「知识库」三个字。',
+  },
+  {
+    date: '2026-11-03',
+    area: '面板',
+    title: '未选知识库时显示这一页',
+    detail: '右侧详情区原来是一张空白提示卡，现在显示版本更新详情。',
+    effect: '选中任一知识库后本页被其内容覆盖，取消选择后回来。',
   },
   {
     date: '2026-11-03',
