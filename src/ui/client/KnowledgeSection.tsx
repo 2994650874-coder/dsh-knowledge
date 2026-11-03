@@ -8,11 +8,10 @@
  * @module dsh-knowledge/client/KnowledgeSection
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent } from 'react'
 import { serializeContextWindow } from '../../knowledge/context.js'
 import { KnowledgeApi } from './api.js'
-import { getTitlebarInset, subscribeTitlebarInset } from './titlebar-safe-area.js'
 import { EvidenceInspector, ProcessingSummary, SourceReferences, processingStageLabel } from './processing-evidence.js'
 import type {
   BaseSourceInfo,
@@ -93,7 +92,6 @@ import { ContextMenu, PopoverMenu } from './popover.js'
 import type { MenuEntry } from './popover.js'
 import { RagConfigPanel } from './rag-config.js'
 import type { Translate } from './locales.js'
-import type { KnowledgePanelStore } from './panel-store.js'
 
 export type { Translate } from './locales.js'
 
@@ -114,26 +112,37 @@ const PDF_PREVIEW_MAX_BYTES = 100 * 1024 * 1024
 
 // ── sidebar action ───────────────────────────────────────────────────────────
 
-/** The sidebar-foot entry beside Settings: opens the knowledge panel.
+/** The sidebar-foot entry beside Settings: shows the knowledge page in the
+ *  center column and lights up while it is there.
+ *
+ *  The lit state comes from `usePanelInfo` — a standard prop every slot scope
+ *  receives — so the button never keeps a second copy of "is the page open".
+ *  Clicking a lit button returns the column to the conversation.
  *  Styled to match the shell's Settings trigger (same 34px row / 36px rail
  *  geometry and tokens) so the footer reads as one unit. */
 export function SidebarKnowledgeAction(props: {
-  store: KnowledgePanelStore
   t: Translate
-  wide: boolean
+  /** Keyed `main` slot this button toggles; the layout reports it back. */
+  panelKey: string
+  setOpen: (open: boolean) => void
+  usePanelInfo?: (selector: (info: { activePanelId: string | null }) => boolean) => boolean
+  wide?: boolean
 }): JSX.Element {
-  const open = useSyncExternalStore(props.store.subscribe, props.store.getSnapshot)
+  // Optional: a host generation without the panel-info source simply never
+  // lights the button up, which is better than failing the whole footer slot.
+  const active = props.usePanelInfo?.(info => info.activePanelId === props.panelKey) ?? false
   return (
     <button
       className="kb-sidebar-action"
       style={{
         ...style.sidebarAction,
         ...(props.wide ? {} : style.sidebarActionRail),
-        ...(open ? style.sidebarActionActive : {}),
+        ...(active ? style.sidebarActionActive : {}),
       }}
-      onClick={() => props.store.toggle()}
+      onClick={() => props.setOpen(!active)}
       title={props.t('nav')}
       aria-label={props.t('nav')}
+      aria-current={active ? 'page' : undefined}
     >
       <IconBook size={props.wide ? 16 : 18} />
       {props.wide ? <span>{props.t('nav')}</span> : null}
@@ -143,23 +152,25 @@ export function SidebarKnowledgeAction(props: {
 
 // ── the panel ────────────────────────────────────────────────────────────────
 
-/** Frame-wide Cherry Studio-style knowledge base page. */
+/** Center-column Cherry Studio-style knowledge base page.
+ *
+ *  The layout mounts this component only while this panel is the active center
+ *  column, so it carries no open/close state of its own; `onClose` hands the
+ *  column back to the conversation through `ctx.layout.selectPanel(null)`. */
 export function KnowledgePanel(props: {
-  store: KnowledgePanelStore
   api: KnowledgeApi
   t: Translate
-  /** Host workspace registry; optional so the panel still opens without it. */
+  onClose: () => void
+  /** Host workspace registry; optional so the panel still works without it. */
   workspaces?: HostWorkspacesService
-  /** Host session store; optional so the panel still opens without it. */
+  /** Host session store; optional so the panel still works without it. */
   sessions?: HostSessionsService
-}): JSX.Element | null {
-  const open = useSyncExternalStore(props.store.subscribe, props.store.getSnapshot)
-  if (!open) return null
+}): JSX.Element {
   return (
     <PanelBody
       api={props.api}
       t={props.t}
-      onClose={() => props.store.close()}
+      onClose={props.onClose}
       workspaces={props.workspaces}
       sessions={props.sessions}
     />
@@ -198,7 +209,6 @@ function PanelBody(props: {
   workspaces?: HostWorkspacesService
   sessions?: HostSessionsService
 }): JSX.Element {
-  const titlebarInset = useSyncExternalStore(subscribeTitlebarInset, getTitlebarInset, () => 0)
   const { api, t, onClose } = props
   const [bases, setBases] = useState<BaseSummary[]>([])
   const [groups, setGroups] = useState<string[]>([])
@@ -1402,7 +1412,7 @@ function PanelBody(props: {
   }
 
   return (
-    <div style={{ ...style.panel, '--kb-titlebar-inset': `${titlebarInset}px` } as CSSProperties} className="kb-panel-in">
+    <div style={style.panel} className="kb-panel-in">
       <div style={style.header}>
         <div style={style.headerLeft}>
           <IconBook size={20} color={C.accent} />

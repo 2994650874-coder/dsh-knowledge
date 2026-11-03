@@ -25,7 +25,7 @@
 declare const __KB_LOCAL_VERSION__: string
 
 /** Local fork modification date, `YYYY-MM-DD`. Update on every local change. */
-export const LOCAL_MODIFIED = '2026-11-02'
+export const LOCAL_MODIFIED = '2026-11-03'
 
 /** Marker prefix rendered before the date. */
 export const LOCAL_MARK_PREFIX = '本地改'

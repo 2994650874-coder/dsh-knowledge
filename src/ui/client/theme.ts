@@ -112,10 +112,14 @@ body, .kb-panel-in {
 `
 
 export const style = {
+  // The page fills the center column of the shell's three-column frame, which
+  // gives its child no height of its own (`flex-direction: column` plus
+  // `overflow: hidden`), so the root must claim `height: 100%` itself.
+  // NEVER `position: fixed` here: that escapes the column and covers the whole
+  // window, sidebar included — the layout the `main` slot exists to avoid.
   panel: {
-    position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column',
-    top: 'max(var(--kb-titlebar-inset, 0px), calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px)))',
-    background: C.bg, color: C.text, pointerEvents: 'auto',
+    position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column',
+    background: C.bg, color: C.text,
   } as CSSProperties,
   header: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',

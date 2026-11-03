@@ -1,8 +1,12 @@
 /**
- * Browser half of the knowledge base: a Cherry Studio-style sidebar entry at
- * the sidebar foot (beside Settings) plus a frame-wide floating panel. The
- * panel lives OUTSIDE settings — it opens over the workspace, exactly like
- * Cherry Studio's top-level knowledge-base page.
+ * Browser half of the knowledge base: a Cherry Studio-style entry beside
+ * Settings plus a center-column page.
+ *
+ * The page occupies the `main` KEYED slot — the same seat the skill center
+ * uses — so it covers the conversation column only. The sidebar and the right
+ * bar stay mounted and usable while it is open, and the conversation it
+ * displaced stays retained by the workspace (`retainedBy.mainView`), so opening
+ * this page never changes which session is current.
  * @module dsh-knowledge/client
  */
 
@@ -12,11 +16,13 @@ import { KnowledgePanel, SidebarKnowledgeAction } from './KnowledgeSection.js'
 import type { Translate } from './KnowledgeSection.js'
 import { LocalModelsSection } from './LocalModelsSection.js'
 import { en, zh } from './locales.js'
-import { createKnowledgePanelStore } from './panel-store.js'
 import { createDirectoryActions } from './directory-actions.js'
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'settings.knowledge'
+
+/** Keyed `main` slot key AND the sidebar action id — one panel, one name. */
+const PANEL_KEY = 'knowledge'
 
 interface SlotsService {
   inject(name: string, callback: () => void): void
@@ -26,6 +32,11 @@ interface SlotsService {
 interface LocaleService {
   register(ns: string, dict: { zh: unknown; en: unknown }): () => void
   bind(ns: string): (key: string) => string
+}
+
+/** The `layout` service face this plugin drives (see ui-layout's LayoutController). */
+interface LayoutService {
+  selectPanel?(panelId: string | null): void
 }
 
 /** Shape of the host workspace registry consumed by the invocation gate. */
@@ -55,10 +66,28 @@ function readSessionService(ctx: Context): HostSessionsService | undefined {
     return undefined
   }
 }
+
+/**
+ * Select the knowledge page, or `null` to return to the conversation.
+ *
+ * `layout.selectPanel` throws for a key that is not registered, which happens
+ * only while this plugin's `main` entry is being re-registered (hot reload, or
+ * ui-layout not yet mounted). A failed selection is a no-op here: the sidebar
+ * action simply stays inactive until the entry exists.
+ */
+function selectKnowledgePanel(ctx: Context, open: boolean): void {
+  try {
+    const layout = ctx.get('layout') as LayoutService | undefined
+    layout?.selectPanel?.(open ? PANEL_KEY : null)
+  } catch {
+    // ui-layout absent or the key is momentarily unregistered — nothing to do.
+  }
+}
+
 /** Required services; each target slot is awaited through `slots.inject`. */
 export const inject = ['slots', 'locale']
 
-/** Register the knowledge sidebar action and its overlay panel. */
+/** Register the knowledge sidebar action and its center-column page. */
 export function apply(ctx: Context): void {
   const slots = ctx.get('slots') as SlotsService | undefined
   const locale = ctx.get('locale') as LocaleService | undefined
@@ -66,32 +95,43 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => locale.register(NS, { zh, en }), 'ui-knowledge: dictionaries')
   const t = locale.bind(NS) as Translate
-  const store = createKnowledgePanelStore()
   const api = new KnowledgeApi()
 
-  slots.inject('sidebar.footer.action', () => slots.register({
-    name: 'sidebar.footer.action',
-    id: 'knowledge',
-    order: 10,
-    label: () => t('nav'),
-    inject: () => ({ store, t }),
-  }, SidebarKnowledgeAction))
-
-  slots.inject('shell.overlay', () => slots.register({
-    name: 'shell.overlay',
-    id: 'knowledge',
-    order: 10,
+  // The page itself. `main` is a keyed root slot: it renders only while the
+  // layout's `panelInfo.activePanelId` equals this key, and the panel goes away
+  // when the user navigates back to the conversation.
+  slots.inject('main', () => slots.register({
+    name: 'main',
+    key: PANEL_KEY,
     inject: () => ({
-      store,
       api,
       t,
-      // Registered workspaces + the live session list, so the invocation
-      // gate popover can list them and show which one the panel is in.
-      // Resolved per render (not captured) because root slot props are cached.
+      // Switching away from this page is a layout action, not knowledge state:
+      // `null` returns the center column to the conversation.
+      onClose: () => selectKnowledgePanel(ctx, false),
+      // Registered workspaces + the live session list, so the invocation gate
+      // popover can list them and show which workspace the panel is in. The
+      // conversation is only unmounted, not released, while this page is open,
+      // so `retainedBy.mainView` still names the current session.
       workspaces: readWorkspaceService(ctx),
       sessions: readSessionService(ctx),
     }),
   }, KnowledgePanel))
+
+  // Entry point beside Settings. The button derives its lit state from
+  // `usePanelInfo` (a standard prop of every scope), so it needs no knowledge
+  // state of its own: pressing it toggles the center column.
+  slots.inject('sidebar.footer.action', () => slots.register({
+    name: 'sidebar.footer.action',
+    id: PANEL_KEY,
+    order: 10,
+    label: () => t('nav'),
+    inject: () => ({
+      t,
+      panelKey: PANEL_KEY,
+      setOpen: (open: boolean) => { selectKnowledgePanel(ctx, open) },
+    }),
+  }, SidebarKnowledgeAction))
 
   slots.inject('settings.section', () => slots.register({
     name: 'settings.section',
