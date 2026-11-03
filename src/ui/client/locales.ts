@@ -137,6 +137,10 @@ export type KnowledgeKey =
   | 'notEmbedded'
   | 'noBases'
   | 'selectBase'
+  | 'changelogTitle'
+  | 'changelogSubtitle'
+  | 'changelogHint'
+  | 'changelogLoadMore'
   | 'noDocuments'
   | 'docCount'
   | 'chunkCount'
@@ -513,6 +517,10 @@ export const zh: Record<KnowledgeKey, string> = {
   notEmbedded: '未向量化',
   noBases: '暂无知识库',
   selectBase: '选择一个知识库',
+  changelogTitle: '版本更新详情',
+  changelogSubtitle: '最新在上',
+  changelogHint: '选择左侧任一知识库后，此页将显示该库的内容',
+  changelogLoadMore: '加载更早的记录',
   noDocuments: '暂无数据源',
   docCount: '个文档',
   chunkCount: '个分块',
@@ -895,6 +903,10 @@ export const en: Record<KnowledgeKey, string> = {
   notEmbedded: 'not embedded',
   noBases: 'No knowledge bases',
   selectBase: 'Select a knowledge base',
+  changelogTitle: 'Version history',
+  changelogSubtitle: 'newest first',
+  changelogHint: 'Pick a base on the left and this page switches to its contents',
+  changelogLoadMore: 'Load earlier changes',
   noDocuments: 'No data sources',
   docCount: ' docs',
   chunkCount: ' chunks',

@@ -67,6 +67,10 @@ export const PANEL_CSS = `
 body, .kb-panel-in {
   --kb-hover: color-mix(in srgb, var(--dsw-alias-label-primary, #1f2329) 9%, transparent);
   --kb-active: color-mix(in srgb, var(--dsw-alias-label-primary, #1f2329) 16%, transparent);
+  /* Change-log label block. A warm paper tint marks it as a label rather than
+     body text; mixed from the label token so the dark theme gets a matching
+     dim warm block instead of a glaring light rectangle. */
+  --kb-label-fill: color-mix(in srgb, #f5efe6 88%, var(--dsw-alias-label-primary, #1f2329) 12%);
 }
 .kb-row { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease }
 .kb-row:hover { background: var(--kb-hover) }

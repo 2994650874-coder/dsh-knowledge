@@ -47,6 +47,7 @@ interface HostSessionsService {
 }
 import { C, PANEL_CSS, avatarColor, formatRelativeTime, formatSize, style } from './theme.js'
 import { KB_LOCAL_VERSION, localMarkLabel } from './build-info.js'
+import { CHANGELOG } from './changelog.js'
 import {
   chunkPreviewBodyId,
   collapseAllChunks,
@@ -1589,11 +1590,11 @@ function PanelBody(props: {
 
         <main style={style.main} className="kb-scroll">
           {selectedBaseId === null || selectedBase === null ? (
-            <div style={{ ...style.card, ...style.empty }}>
-              <div style={{ fontSize: 30, marginBottom: 8, color: C.muted }}><IconBook size={30} color={C.muted} /></div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>{t('selectBase')}</div>
-              <div style={{ fontSize: 12 }}>{t('noDocsHint')}</div>
-            </div>
+            // Nothing selected yet: the page would otherwise sit empty while it
+            // owns the widest column on screen. Show the fork's own change log
+            // instead — it is the one thing worth reading before a base is
+            // picked — and hand the area back to the base as soon as one is.
+            <ChangeLogPane t={t} />
           ) : (
             <>
               {/* Detail header: name + 召回测试 / 设置 (Cherry Studio DetailHeader) */}
@@ -2462,6 +2463,139 @@ function RecallResultCard(props: { hit: SearchHit; index: number; t: Translate }
           ...(expanded ? {} : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }),
         }}>{displayText}</p>
         <SourceReferences documentId={hit.docId} spans={hit.sourceSpans} t={t} />
+      </div>
+    </div>
+  )
+}
+
+// ── empty-detail change log ──────────────────────────────────────────────────
+
+/** How many entries the change log renders before the user scrolls further. */
+const CHANGELOG_PAGE_SIZE = 5
+
+/** The detail pane before a base is picked.
+ *
+ *  Fills the pane with the fork's local changes, newest first. Three rules here
+ *  are easy to get wrong:
+ *
+ *  - **Width follows the pane, not this component.** The original empty state
+ *    was a card stretched by `style.main`'s column flex; any `alignItems: center`
+ *    or `maxWidth` here shrinks it to a narrow strip.
+ *  - **No second frame.** `style.main` already provides the panel's inner region,
+ *    so this pane deliberately drops `style.card`'s border and background —
+ *    stacking another frame inside it reads as a box inside a box.
+ *  - **Rows are two columns, date on the left.** A stacked layout piles title,
+ *    detail and effect into a narrow band; splitting them puts the wide column
+ *    to use and keeps the vertical rhythm open.
+ *
+ *  Height runs to 2.5× the viewport, then pages: older entries are not rendered
+ *  up front, and reaching the bottom pulls in the next page.
+ *
+ *  Picking a base replaces this whole pane for as long as that base is selected.
+ *  Entries come from `changelog.ts` — see that file's contract before adding one. */
+function ChangeLogPane(props: { t: Translate }): JSX.Element {
+  const t = props.t
+  const [visible, setVisible] = useState(CHANGELOG_PAGE_SIZE)
+  const shown = CHANGELOG.slice(0, visible)
+  const remaining = CHANGELOG.length - shown.length
+
+  // The scroll container is the panel body (`style.main`, already owned by the
+  // shell), not this module: a second scrollbar inside a 2.5-screen-tall block
+  // would be a frame inside a frame and would fight the page's own wheel
+  // handling. So the module simply grows to 250vh and the observer below asks
+  // for the next page when its bottom edge comes into view.
+  const sentinel = useRef<HTMLDivElement | null>(null)
+  const loading = useRef(false)
+  useEffect(() => {
+    const node = sentinel.current
+    if (node === null) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      if (loading.current) return
+      if (!entries.some(entry => entry.isIntersecting)) return
+      if (visible >= CHANGELOG.length) return
+      loading.current = true
+      setVisible(current => current + CHANGELOG_PAGE_SIZE)
+      window.requestAnimationFrame(() => { loading.current = false })
+    }, { rootMargin: '0px 0px 120px 0px' })
+    observer.observe(node)
+    return () => { observer.disconnect() }
+  }, [visible])
+
+  return (
+    // 2.5× the panel height: the module itself is that tall and the page around
+    // it scrolls; the list is never given its own scrollbar.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: '250vh' }}>
+      {/* Title block left-aligned at the module's own edge, sitting over the
+          label column — centering it would put it over the spine and fight the
+          left/right reading of the rows below. The "pick a base" hint rides
+          here rather than at the bottom: it explains the page before anything
+          is read, and the last row already ends the list. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-start', gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{t('changelogTitle')}</span>
+          <span style={{ fontSize: 11, color: C.muted }}>{t('changelogSubtitle')}</span>
+        </div>
+        <span style={{ fontSize: 11, color: C.muted }}>{t('changelogHint')}</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: '100%' }}>
+        {shown.map(entry => (
+          <div
+            key={`${entry.date}-${entry.title}`}
+            // Asymmetric split, not 50/50: the label block is a short headline
+            // and a date, so it takes the smaller share and the descriptions get
+            // the wide side. Fixed proportions (2 : 5 of the row) keep the spine
+            // on one vertical line for every row.
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '2px 0' }}
+          >
+            {/* Left: a filled, bordered label block — headline and date. Its
+                inner text is centered on the block, not pushed at the spine. */}
+            <div style={{
+              flex: '2 1 0', minWidth: 0, boxSizing: 'border-box',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+              textAlign: 'center',
+              border: `1px solid ${C.border}`, borderRadius: 10,
+              background: 'var(--kb-label-fill)', padding: '9px 12px',
+            }}>
+              <span style={{
+                flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+                color: C.accent, background: accentSoftText(), borderRadius: 999, padding: '2px 8px',
+              }}>{entry.area}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>{entry.title}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums',
+                color: C.muted,
+              }}>{entry.date}</span>
+            </div>
+
+            {/* Spine: the shared vertical rule both halves hang off. */}
+            <span aria-hidden="true" style={{ flexShrink: 0, width: 1, alignSelf: 'stretch', background: C.border }} />
+
+            {/* Right: the actual change, left-aligned away from the spine. It
+                takes the larger share of the row (5 parts against the label's
+                2), which is what moves the spine off the module's center. */}
+            <div style={{ flex: '5 1 0', minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: C.text, lineHeight: 1.65 }}>{entry.detail}</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.55, marginTop: 3 }}>{entry.effect}</div>
+            </div>
+          </div>
+        ))}
+
+        {/* Watched by the observer above: when this scrolls into view the next
+            page is appended. It must be rendered for the observer to have a
+            target — a ref with no element never intersects. */}
+        {remaining > 0 && (
+          <div ref={sentinel} style={{ display: 'flex', justifyContent: 'center', paddingTop: 4 }}>
+            <button
+              className="kb-btn"
+              style={style.button}
+              onClick={() => setVisible(current => current + CHANGELOG_PAGE_SIZE)}
+            >
+              {t('changelogLoadMore')} · {remaining}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
