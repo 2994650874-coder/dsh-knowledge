@@ -112,12 +112,21 @@ const PDF_PREVIEW_MAX_BYTES = 100 * 1024 * 1024
 
 // ── sidebar action ───────────────────────────────────────────────────────────
 
+/** The mounted page's deferred close, so the sidebar entry can play the exit
+ *  animation too instead of yanking the panel out from under it.
+ *  Module scope is deliberate: the button and the page are two React trees but
+ *  one module instance. It is a function reference, not state — nothing renders
+ *  from it, so there is no second copy of "is the page open". */
+let requestPanelClose: (() => void) | undefined
+
 /** The sidebar-foot entry beside Settings: shows the knowledge page in the
  *  center column and lights up while it is there.
  *
  *  The lit state comes from `usePanelInfo` — a standard prop every slot scope
  *  receives — so the button never keeps a second copy of "is the page open".
- *  Clicking a lit button returns the column to the conversation.
+ *  Clicking a lit button returns the column to the conversation, through the
+ *  page's own deferred close when it is mounted (so it fades out), and directly
+ *  otherwise (nothing to animate).
  *  Styled to match the shell's Settings trigger (same 34px row / 36px rail
  *  geometry and tokens) so the footer reads as one unit. */
 export function SidebarKnowledgeAction(props: {
@@ -139,7 +148,10 @@ export function SidebarKnowledgeAction(props: {
         ...(props.wide ? {} : style.sidebarActionRail),
         ...(active ? style.sidebarActionActive : {}),
       }}
-      onClick={() => props.setOpen(!active)}
+      onClick={() => {
+        if (active) (requestPanelClose ?? (() => { props.setOpen(false) }))()
+        else props.setOpen(true)
+      }}
       title={props.t('nav')}
       aria-label={props.t('nav')}
       aria-current={active ? 'page' : undefined}
@@ -152,11 +164,26 @@ export function SidebarKnowledgeAction(props: {
 
 // ── the panel ────────────────────────────────────────────────────────────────
 
+/** Fallback for `.kb-panel-out`'s duration in `theme.ts` PANEL_CSS (110ms).
+ *  The page is unmounted the moment the layout switches back to the
+ *  conversation, so the closing animation only gets to play if the switch waits
+ *  for it. The real trigger is the animation's `animationend`; this timer only
+ *  covers the cases where that event never arrives (element hidden mid-slide,
+ *  animation disabled by the OS, a host that drops the node early). Keep it
+ *  clearly longer than the animation so the normal path always wins. */
+const EXIT_FALLBACK_MS = 220
+
 /** Center-column Cherry Studio-style knowledge base page.
  *
  *  The layout mounts this component only while this panel is the active center
  *  column, so it carries no open/close state of its own; `onClose` hands the
- *  column back to the conversation through `ctx.layout.selectPanel(null)`. */
+ *  column back to the conversation through `ctx.layout.selectPanel(null)`.
+ *
+ *  Closing plays the reverse of the entry animation. The `main` slot is keyed:
+ *  switching back unmounts this component immediately, so an exit that merely
+ *  added a class on unmount would never render. Instead `onClose` is deferred
+ *  until `.kb-panel-out` finishes, with a guard so a second click during the
+ *  fade cannot queue a second navigation. */
 export function KnowledgePanel(props: {
   api: KnowledgeApi
   t: Translate
@@ -166,14 +193,65 @@ export function KnowledgePanel(props: {
   /** Host session store; optional so the panel still works without it. */
   sessions?: HostSessionsService
 }): JSX.Element {
+  const [closing, setClosing] = useState(false)
+  // Guard: set on the first close, so re-entry cannot queue two navigations.
+  const pending = useRef(false)
+  const timer = useRef<number | undefined>(undefined)
+  const { onClose } = props
+
+  const finish = useCallback((): void => {
+    if (timer.current !== undefined) {
+      window.clearTimeout(timer.current)
+      timer.current = undefined
+    }
+    requestPanelClose = undefined
+    onClose()
+  }, [onClose])
+
+  const close = useCallback((): void => {
+    if (pending.current) return
+    pending.current = true
+    setClosing(true)
+    // The animation ends on its own; the timer is the safety net only.
+    timer.current = window.setTimeout(finish, EXIT_FALLBACK_MS)
+  }, [finish])
+
+  // Publish the deferred close while mounted, so the sidebar entry slides the
+  // page out instead of switching the column under it. Restored on unmount even
+  // when the close did not come from the button.
+  useEffect(() => {
+    requestPanelClose = close
+    return () => {
+      requestPanelClose = undefined
+      // A timer surviving unmount would switch the panel from wherever the user
+      // is by then, so cancel it on the way out.
+      if (timer.current !== undefined) {
+        window.clearTimeout(timer.current)
+        timer.current = undefined
+      }
+    }
+  }, [close])
+
   return (
-    <PanelBody
-      api={props.api}
-      t={props.t}
-      onClose={props.onClose}
-      workspaces={props.workspaces}
-      sessions={props.sessions}
-    />
+    <div
+      className={closing ? 'kb-panel-out' : 'kb-panel-in'}
+      style={style.panelWrap}
+      // Switching on the animation's own end removes the gap a fixed timer
+      // leaves between "slid out" and "conversation mounted". Only the exit may
+      // trigger it: a fast close during the entry would otherwise end on the
+      // entry's event and skip the slide entirely.
+      onAnimationEnd={closing ? (event) => {
+        if (event.animationName === 'kb-slide-out') finish()
+      } : undefined}
+    >
+      <PanelBody
+        api={props.api}
+        t={props.t}
+        onClose={close}
+        workspaces={props.workspaces}
+        sessions={props.sessions}
+      />
+    </div>
   )
 }
 
@@ -1412,7 +1490,7 @@ function PanelBody(props: {
   }
 
   return (
-    <div style={style.panel} className="kb-panel-in">
+    <div style={style.panel}>
       <div style={style.header}>
         <div style={style.headerLeft}>
           <IconBook size={20} color={C.accent} />

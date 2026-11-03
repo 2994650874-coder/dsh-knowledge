@@ -33,9 +33,30 @@ export const accentSoft = 'color-mix(in srgb, var(--dsw-alias-brand-primary, #3b
 /** One-off hover/animation CSS injected once by the panel. */
 export const PANEL_CSS = `
 @keyframes kb-spin { to { transform: rotate(360deg) } }
-@keyframes kb-fade-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+/* Enter and leave are one horizontal gesture, left to right: the page is pushed
+   in from the sidebar side and pulled back out the same way. Horizontal (not a
+   fade in place) because the center column is a keyed slot — going back unmounts
+   this page and mounts the conversation, so anything that reaches low opacity
+   early shows the empty column instead of the page leaving. Keeping the page
+   opaque while it slides covers that hand-off. */
+@keyframes kb-slide-in { from { opacity: 0; transform: translateX(-12px) } to { opacity: 1; transform: none } }
+/* Deliberately slower than the entry looks like it should be. Going back also
+   unmounts this page and remounts the conversation, and that hand-off is visible
+   on top of the slide, so the way in has to be the longer of the two for the two
+   directions to feel like one round trip at the same speed. */
+@keyframes kb-slide-out {
+  from { opacity: 1; transform: none }
+  60% { opacity: 1; transform: translateX(-14px) }
+  to { opacity: 0; transform: translateX(-24px) }
+}
 .kb-spinner { animation: kb-spin 0.9s linear infinite }
-.kb-panel-in { animation: kb-fade-in 0.18s ease-out }
+.kb-panel-in { animation: kb-slide-in 0.24s ease-out }
+/* Duration is mirrored by EXIT_FALLBACK_MS in KnowledgeSection.tsx: React must
+   not unmount before it ends, so the two must stay in step. */
+.kb-panel-out { animation: kb-slide-out 0.11s ease-in forwards; pointer-events: none }
+@media (prefers-reduced-motion: reduce) {
+  .kb-panel-in, .kb-panel-out { animation: none }
+}
 /* Theme-adaptive interaction fills. DSH's own layer tokens are pure white in
    the light theme and its interactive-bg-hover is only ~6% alpha, so hovers
    built on them are nearly invisible. Derive hover/active fills from the
@@ -112,6 +133,12 @@ body, .kb-panel-in {
 `
 
 export const style = {
+  // Animation host for the page. The center column gives its occupant no
+  // height, so this wrapper claims it and the panel fills the wrapper; the
+  // enter/exit fade lives here so neither animation touches layout.
+  panelWrap: {
+    position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column',
+  } as CSSProperties,
   // The page fills the center column of the shell's three-column frame, which
   // gives its child no height of its own (`flex-direction: column` plus
   // `overflow: hidden`), so the root must claim `height: 100%` itself.
