@@ -24,7 +24,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -34,11 +34,20 @@ import { fileURLToPath } from 'node:url'
  */
 const MAX_SCAN_FILES = 400
 
+/**
+ * Marker recording which DSH build the provisioned packages came from. Written
+ * after a successful provisioning pass and compared on every later start, so a
+ * host upgrade refreshes the copy without any manual step.
+ */
+const STAMP_FILE = '.dsh-knowledge-provisioned.json'
+
 /** Package names that live inside 'app.asar' and must be extracted on demand. */
 interface AsarReader {
   close(): void
-  /** Extract 'asarPath' (a directory node) into 'outDir'. Returns file count. */
+  /** Extract 'asarPath' (a directory node) into 'outDir'. Returns file count, -1 if absent. */
   extract(asarPath: string, outDir: string): number
+  /** Read one file inside the archive as UTF-8 text, or undefined if absent. */
+  readFile(asarPath: string): string | undefined
 }
 
 /**
@@ -79,6 +88,14 @@ function openAsar(asarPath: string): AsarReader | undefined {
     return {
       close() {
         closeSync(fd)
+      },
+      readFile(asarPathInArchive: string): string | undefined {
+        const node = find(asarPathInArchive)
+        if (!node || node.files) return undefined
+        if (node.offset === undefined || typeof node.size !== 'number') return undefined
+        const buffer = Buffer.alloc(node.size)
+        readSync(fd, buffer, 0, node.size, dataOffset + Number(node.offset))
+        return buffer.toString('utf8')
       },
       extract(asarPathInArchive: string, outDir: string): number {
         const root = find(asarPathInArchive)
@@ -222,6 +239,122 @@ export interface HealOptions {
 }
 
 /**
+ * Read the DSH version out of the archive header, without extracting anything.
+ *
+ * 'dsh/package.json' inside app.asar is the desktop runtime manifest, so its
+ * version moves exactly when the host is upgraded. Used as the staleness stamp:
+ * provisioned packages are only valid for the host that produced them.
+ */
+function hostVersionOf(reader: AsarReader): string | undefined {
+  for (const candidate of ['dsh/package.json', 'package.json']) {
+    const raw = reader.readFile(candidate)
+    if (raw === undefined) continue
+    try {
+      const parsed = JSON.parse(raw) as { version?: unknown }
+      if (typeof parsed.version === 'string' && parsed.version.length > 0) return parsed.version
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return undefined
+}
+
+/** Record the host version the provisioned packages came from. */
+function writeStamp(targetModules: string, hostVersion: string | undefined): void {
+  try {
+    mkdirSync(targetModules, { recursive: true })
+    writeFileSync(
+      join(targetModules, STAMP_FILE),
+      JSON.stringify({ hostVersion: hostVersion ?? null, recordedAt: new Date().toISOString() }, undefined, 2) + '\n',
+    )
+  } catch {
+    /* a missing stamp only costs one re-provision next start */
+  }
+}
+
+/**
+ * Read the stamp written when the packages were provisioned.
+ *
+ * Returns undefined when there is no stamp (older install, or the marker was
+ * deleted). undefined is treated as "unknown, keep what is there" to avoid
+ * re-extracting on every start for a copy provisioned before this file existed.
+ */
+function readStamp(targetModules: string): { hostVersion?: string | null } | undefined {
+  try {
+    return JSON.parse(readFileSync(join(targetModules, STAMP_FILE), 'utf8')) as { hostVersion?: string | null }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Decide whether the provisioned packages must be discarded.
+ *
+ * The copy under node_modules is a snapshot of one specific DSH build. After the
+ * host is upgraded, that snapshot is stale: its packages may be a version behind
+ * the APIs the plugin is compiled against, which surfaces later as unrelated
+ * runtime errors that are painful to trace back here. Comparing the recorded
+ * host version with the live one turns that into an automatic re-provision.
+ *
+ * Only an explicit, different version triggers a wipe. No stamp, no readable
+ * archive, or an unversioned archive all mean "keep", so the worst case is
+ * staying on a stale copy rather than thrashing on every start.
+ */
+function shouldReprovision(targetModules: string, hostVersion: string | undefined): boolean {
+  if (hostVersion === undefined) return false
+  const stamp = readStamp(targetModules)
+  if (!stamp) return false
+  const recorded = stamp.hostVersion
+  if (typeof recorded !== 'string' || recorded.length === 0) return false
+  return recorded !== hostVersion
+}
+
+/** Remove every provisioned package and the stamp. Non-provisioned entries stay. */
+function clearProvisioned(targetModules: string): string[] {
+  const removed: string[] = []
+  const drop = (name: string): void => {
+    const full = join(targetModules, name)
+    try {
+      rmSync(full, { recursive: true, force: true })
+      removed.push(name)
+    } catch {
+      /* keep going: one sticky package must not block the rest */
+    }
+  }
+
+  let entries: string[] = []
+  try {
+    entries = readdirSync(targetModules)
+  } catch {
+    return removed
+  }
+
+  for (const entry of entries) {
+    if (entry === '.bin' || entry === '.package-lock.json' || entry === 'esbuild') continue
+    if (entry.startsWith('@')) {
+      // Scoped: clear only the scope's own packages, keep the directory.
+      let scoped: string[] = []
+      try {
+        scoped = readdirSync(join(targetModules, entry))
+      } catch {
+        continue
+      }
+      for (const child of scoped) drop(entry + '/' + child)
+      continue
+    }
+    if (entry === STAMP_FILE) continue
+    drop(entry)
+  }
+
+  try {
+    rmSync(join(targetModules, STAMP_FILE), { force: true })
+  } catch {
+    /* ignore */
+  }
+  return removed
+}
+
+/**
  * Make every specifier resolvable from this package.
  *
  * Fast path: 'require.resolve' succeeds AND loading it works, so nothing is
@@ -243,6 +376,10 @@ export interface HealOptions {
  * util-values), so after installing one package we inspect what it imports and
  * queue the misses. Attempts are recorded, so an unfindable package is not
  * retried and a dependency cycle terminates.
+ *
+ * Staleness is automatic: before anything else the recorded host version is
+ * compared with the live one, and a mismatch wipes the provisioned copy so it is
+ * rebuilt from the new host. Upgrading DSH therefore needs no manual step.
  */
 export function ensureRuntimeDependencies(options: HealOptions): HealResult {
   const packageRoot = fileURLToPath(options.root)
@@ -254,6 +391,28 @@ export function ensureRuntimeDependencies(options: HealOptions): HealResult {
   const extracted: string[] = []
   const unresolved = new Set<string>()
   const attempted = new Set<string>()
+
+  // One archive handle for both the version check and every extraction below.
+  let hostVersion: string | undefined
+  for (const asarPath of asarCandidates()) {
+    const reader = openAsar(asarPath)
+    if (!reader) continue
+    try {
+      hostVersion = hostVersionOf(reader)
+    } finally {
+      reader.close()
+    }
+    if (hostVersion !== undefined) break
+  }
+
+  let cleared: string[] = []
+  if (shouldReprovision(targetModules, hostVersion)) {
+    cleared = clearProvisioned(targetModules)
+    console.info(
+      '[dsh-knowledge] DSH upgraded to ' + String(hostVersion) +
+      ': refreshing ' + cleared.length + ' provisioned package(s) from the new installation',
+    )
+  }
 
   /** True when the specifier resolves and the resolved module can be loaded. */
   const usable = (specifier: string): boolean => {
@@ -347,6 +506,13 @@ export function ensureRuntimeDependencies(options: HealOptions): HealResult {
         queue.add(name)
       }
     }
+  }
+
+  // Record which host build this copy came from. Written even when nothing was
+  // extracted: an up-to-date copy still needs the stamp so a later upgrade is
+  // detected rather than silently reused for ever.
+  if (extracted.length > 0 || cleared.length > 0 || readStamp(targetModules) === undefined) {
+    writeStamp(targetModules, hostVersion)
   }
 
   return { extracted: [...new Set(extracted)], unresolved: [...unresolved] }
