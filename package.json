@@ -25,11 +25,11 @@
     },
     "./knowledge": {
       "types": "./lib/types/knowledge/index.d.ts",
-      "default": "./lib/knowledge/index.js"
+      "default": "./lib/bootstrap/knowledge.js"
     },
     "./tool-knowledge": {
       "types": "./lib/types/tool-knowledge/index.d.ts",
-      "default": "./lib/tool-knowledge/index.js"
+      "default": "./lib/bootstrap/tool-knowledge.js"
     },
     "./client": {
       "types": "./lib/types/ui/client/index.d.ts",
@@ -88,9 +88,7 @@
     "smoke:local-embedding": "npm run build --silent && node scripts/smoke-local-embedding.mjs",
     "smoke:local-rerank": "npm run build --silent && node scripts/smoke-local-rerank.mjs",
     "release:check": "node scripts/release-check.mjs",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build",
-    "prepack": "node build.mjs",
-    "prepare": "node build.mjs"
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "keywords": [
     "dsh",
@@ -105,20 +103,14 @@
   ],
   "dependencies": {
     "jszip": "^3.10.1",
-    "undici": "^7.30.0"
+    "undici": "^7.30.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "link:../dsh/vendor/cordis",
-    "@deepseek-ai/dsh-host-webserver": "link:../dsh/packages/host/webserver",
-    "@deepseek-ai/dsh-storage": "link:../dsh/packages/storage/storage",
-    "@deepseek-ai/dsh-storage-domain": "link:../dsh/packages/storage/storage-domain",
-    "@deepseek-ai/dsh-tools": "link:../dsh/packages/core/tools",
-    "@deepseek-ai/schemastery": "link:../dsh/vendor/schemastery",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
     "esbuild": "^0.25.0",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.8",
-    "zod": "^4.4.3"
+    "vitest": "^4.1.8"
   }
 }

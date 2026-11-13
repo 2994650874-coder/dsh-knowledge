@@ -67,13 +67,18 @@ async function scrubMachinePaths(outfile) {
 
 // Host: DSH/cordis/zod packages are peer-provided; document parsers are
 // runtime dependencies resolved from node_modules. Everything else bundles.
+//
+// `jszip` is deliberately NOT external any more. ZIP handling is reachable from
+// the always-loaded knowledge bundle, but jszip does not ship inside DSH's own
+// `app.asar`, so the first-run healer (src/bootstrap/heal.ts) has no source to
+// provision it from. Inlining it keeps a fresh `link:` install self-sufficient;
+// the other entries below are loaded lazily and are all present in app.asar.
 const hostExternal = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-*',
   'zod',
   'pdf-parse',
   'mammoth',
-  'jszip',
   'word-extractor',
   '@firecrawl/anydoc',
   '@huggingface/transformers',
@@ -85,7 +90,6 @@ const hostExternal = [
   'ppu-ocv',
   '@napi-rs/canvas',
   '@techstark/opencv-js',
-  'onnxruntime-node',
   'undici',
   'mupdf',
   'turndown',
@@ -98,6 +102,14 @@ const hostEntries = [
   // Kept as a bundled public runtime entry so smoke tests exercise production code.
   ['src/knowledge/mineru-deployment.ts', 'lib/knowledge/mineru-deployment.mjs'],
   ['src/tool-knowledge/index.ts', 'lib/tool-knowledge/index.js'],
+  // Loader shims: guarantee the host-provided packages exist next to this
+  // plugin, then import the real entry above. A `link:` install resolves bare
+  // specifiers from plugin-src, where DSH's own packages (living inside
+  // app.asar) are not reachable, so without these two rows a fresh install dies
+  // on the first `import … from 'zod'`. The bundle itself has no external
+  // imports — everything it needs is a `node:` builtin.
+  ['src/bootstrap/knowledge.ts', 'lib/bootstrap/knowledge.js'],
+  ['src/bootstrap/tool-knowledge.ts', 'lib/bootstrap/tool-knowledge.js'],
   // Local embedding inference process: a separate ESM bundle loaded via
   // child_process IPC, so a native ONNX crash or timeout can be recovered
   // without restarting DSH itself.
@@ -130,6 +142,50 @@ for (const [entry, outfile] of hostEntries) {
   })
   await scrubMachinePaths(outfile)
 }
+
+/**
+ * Collect the bare specifiers the always-loaded bundles actually import, and
+ * write them as `lib/bootstrap/manifest.json`.
+ *
+ * The first-run healer reads this list to decide what to provision, so deriving
+ * it from the emitted code (rather than a hand-kept array) means a new import in
+ * `knowledge/index.ts` can never silently become an unprovisioned dependency.
+ *
+ * Only the two entries the loader shims gate are scanned: the `*-process.mjs`
+ * workers are spawned lazily and their packages arrive with the same set.
+ */
+const HEAL_BUNDLES = ['lib/knowledge/index.js', 'lib/tool-knowledge/index.js']
+
+/** `@scope/name` or `name` for a bare specifier; undefined for paths/builtins. */
+function packageNameOf(specifier) {
+  if (!specifier || specifier.startsWith('.') || specifier.startsWith('/')) return undefined
+  if (specifier.startsWith('node:') || specifier.startsWith('file:') || specifier.startsWith('data:')) return undefined
+  if (/^[A-Za-z]:/.test(specifier) || specifier.includes('\\')) return undefined
+  const parts = specifier.split('/')
+  if (specifier.startsWith('@')) return parts.length >= 2 ? parts.slice(0, 2).join('/') : undefined
+  return parts[0]
+}
+
+const discovered = new Set()
+for (const bundle of HEAL_BUNDLES) {
+  const source = await readFile(new URL(bundle, import.meta.url), 'utf8')
+  // Static imports only: `import x from 'y'` / `import { a } from 'y'` /
+  // `import 'y'`. Dynamic `import()` targets are lazy and not needed up front.
+  for (const match of source.matchAll(/^\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm)) {
+    const name = packageNameOf(match[1])
+    if (name) discovered.add(name)
+  }
+}
+
+await writeFile(
+  new URL('lib/bootstrap/manifest.json', import.meta.url),
+  JSON.stringify({
+    // Written by build.mjs — do not edit by hand.
+    generatedFrom: HEAL_BUNDLES,
+    specifiers: [...discovered].sort(),
+  }, undefined, 2) + '\n',
+)
+console.info('bootstrap manifest: ' + discovered.size + ' specifier(s) -> ' + [...discovered].sort().join(', '))
 
 // Client: the platform modules the shell shares into the frozen module table.
 const clientExternal = [

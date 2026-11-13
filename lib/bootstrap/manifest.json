@@ -1,0 +1,13 @@
+{
+  "generatedFrom": [
+    "lib/knowledge/index.js",
+    "lib/tool-knowledge/index.js"
+  ],
+  "specifiers": [
+    "@deepseek-ai/cordis",
+    "@deepseek-ai/dsh-storage-domain",
+    "@deepseek-ai/dsh-tools",
+    "undici",
+    "zod"
+  ]
+}
