@@ -22,7 +22,6 @@ import type {
   DirectorySyncResult,
   DocumentSummary,
   KnowledgeConfig,
-  LocalModelStatus,
   SearchHit,
   SearchMode,
   RerankStatus,
@@ -325,15 +324,6 @@ function PanelBody(props: {
   // while Cherry's asynchronous job keeps its preparing state visible. The
   // marks clear when the request settles.
   const [optimisticProcessing, setOptimisticProcessing] = useState<Set<string>>(new Set())
-  // Cherry's empty-state guidance: when the global embedding provider is the
-  // local model and it is not downloaded yet, the empty base explains what to
-  // do instead of silently importing vectors-less content.
-  const [localEmbeddingDownloaded, setLocalEmbeddingDownloaded] = useState<boolean | null>(null)
-  // Live status of the SELECTED base's local embedding model (Cherry's
-  // DataSourcePanel full-list state view): downloading progress, not-downloaded
-  // and error states get a progress ring / guidance + a "go to settings" button
-  // instead of a silent lexical-only list.
-  const [localModelStatus, setLocalModelStatus] = useState<LocalModelStatus | null>(null)
   const [docLimit, setDocLimit] = useState(100)
   const [navWidth, setNavWidth] = useState(272)
   // Sliding side panels (settings / recall test) are resizable too; the width
@@ -464,15 +454,6 @@ function PanelBody(props: {
     document.addEventListener('mouseup', onUp)
   }, [sidePanelWidth])
 
-  // Local embedding readiness, for the empty-state guidance.
-  useEffect(() => {
-    let cancelled = false
-    void api.listLocalModels().then(list => {
-      if (!cancelled) setLocalEmbeddingDownloaded(list.some(m => m.kind === 'embedding' && m.status === 'ready'))
-    }).catch(() => { if (!cancelled) setLocalEmbeddingDownloaded(true) })
-    return () => { cancelled = true }
-  }, [api])
-
   const refreshStats = useCallback(async (baseId: string | null): Promise<void> => {
     setStats(await api.stats(baseId ?? undefined))
   }, [api])
@@ -584,13 +565,43 @@ function PanelBody(props: {
         }
         anyActive = activeIds.size > 0
         const changed = !sameSet(activeIdsRef.current, activeIds)
+        const wasActive = activeIdsRef.current.size > 0
         activeIdsRef.current = activeIds
         if (!disposed) {
           const byId = new Map(entries.filter(entry => entry.baseId === selectedBaseId).map(entry => [entry.docId, entry]))
-          setDocuments(current => current.map(doc => {
-            const entry = byId.get(doc.id)
-            return entry === undefined ? doc : { ...doc, indexingPhase: entry.phase, indexingProgress: entry.progress, processingProgress: entry.processingProgress }
-          }))
+          // `doc.status` is the authority on whether a row is still working:
+          // `listDocuments` flips it to `completed` the moment the job ends. The
+          // host keeps a finished job's last percentage visible for ~60s
+          // ("linger") so the row does not blank out mid-flight — but that
+          // entry outlives the job, and writing it into `indexingPhase`
+          // unconditionally is what pinned the row at 「嵌入中 0%」. So the live
+          // entry only applies while the document itself still says processing.
+          //
+          // `dirty` matters as much as the values: `map` always returns a NEW
+          // array, so an unconditional setState re-rendered the whole table —
+          // and restarted every `.kb-spinner` CSS animation — on each 800ms tick
+          // even when nothing had changed (that read as constant flicker).
+          // Unchanged rows are handed back by reference and, when no row changed,
+          // the previous array itself is returned so React skips the update.
+          setDocuments(current => {
+            let dirty = false
+            const next = current.map(doc => {
+              const entry = byId.get(doc.id)
+              // Same "still working" set the row menu uses (pending counts too).
+              const live = entry !== undefined && (doc.status === 'processing' || doc.status === 'pending')
+              if (!live) {
+                if (doc.indexingPhase === undefined) return doc
+                dirty = true
+                return { ...doc, indexingPhase: undefined, indexingProgress: undefined, processingProgress: undefined }
+              }
+              if (doc.indexingPhase === entry.phase
+                && doc.indexingProgress === entry.progress
+                && doc.processingProgress === entry.processingProgress) return doc
+              dirty = true
+              return { ...doc, indexingPhase: entry.phase, indexingProgress: entry.progress, processingProgress: entry.processingProgress }
+            })
+            return dirty ? next : current
+          })
         }
         if (!disposed && changed) void reloadDocuments()
       } catch {
@@ -601,6 +612,12 @@ function PanelBody(props: {
       // always fresh right after any user action anyway).
       if (!disposed && anyActive) {
         timer = window.setTimeout(() => { void poll() }, 800)
+      } else if (!disposed && wasActive) {
+        // The job just settled (active → idle): the poll stops here, so this is
+        // the last chance to pull the finished row state before going idle.
+        // Guarded by `wasActive` so it fires once per transition — reloading on
+        // every idle tick would re-kick the poll through setPollKick and spin.
+        void reloadDocuments()
       }
     }
     void poll()
@@ -1325,33 +1342,6 @@ function PanelBody(props: {
 
   const selectedBase = bases.find(b => b.id === selectedBaseId) ?? null
 
-  // The selected base's effective local embedding model (per-base config wins).
-  const selectedBaseLocalModel = useMemo<string | null>(() => {
-    if (selectedBase === null || globalConfig === null) return null
-    const provider = selectedBase.config?.embeddingProvider ?? globalConfig.embeddingProvider
-    if (provider !== 'local') return null
-    const model = (selectedBase.config?.embeddingModel ?? globalConfig.embeddingModel).trim()
-    return model === '' ? 'onnx-community/Qwen3-Embedding-0.6B-ONNX' : model
-  }, [selectedBase, globalConfig])
-
-  // Poll the model's download/runtime status while the base uses it (Cherry
-  // polls the same 800ms cadence for its header status label + list overlay).
-  useEffect(() => {
-    if (selectedBaseLocalModel === null) { setLocalModelStatus(null); return }
-    let cancelled = false
-    const poll = async (): Promise<void> => {
-      try {
-        const status = await api.getLocalModelStatus(selectedBaseLocalModel)
-        if (!cancelled) setLocalModelStatus(status)
-      } catch {
-        // keep the last known status on transient failures
-      }
-    }
-    void poll()
-    const timer = window.setInterval(() => { void poll() }, 800)
-    return () => { cancelled = true; window.clearInterval(timer) }
-  }, [api, selectedBaseLocalModel])
-
   const selectedDoc = documents.find(doc => doc.id === selectedDocId) ?? null
   const visibleDocuments = documents.filter(doc => (doc.parentDirectoryId ?? null) === currentDirectoryId)
   const renderedDocuments = visibleDocuments.slice(0, docLimit)
@@ -1749,30 +1739,6 @@ function PanelBody(props: {
                           <span style={{ fontSize: 11, color: C.muted }}>
                             {t('updatedAtText')} {formatRelativeTime(selectedBase.updatedAt, t)}
                           </span>
-                          {selectedBaseLocalModel !== null && localModelStatus !== null && localModelStatus.status !== 'ready' && (
-                            <span
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 11, color: localModelStatus.status === 'error' ? C.danger : C.warn,
-                                whiteSpace: 'nowrap',
-                              }}
-                              title={localModelStatus.message || undefined}
-                            >
-                              <span style={{ width: 7, height: 7, borderRadius: 999, background: localModelStatus.status === 'error' ? C.danger : C.warn, flexShrink: 0 }} />
-                              {t('localModelStatusLabel')}
-                              {localModelStatus.status === 'downloading'
-                                ? ` ${Math.round(localModelStatus.progress)}%`
-                                : localModelStatus.status === 'error'
-                                  ? ` · ${t('localModelErrorTitle')}`
-                                  : ` · ${t('localModelNotReadyTitle')}`}
-                              <button
-                                style={{ color: C.accent, cursor: 'pointer', background: 'none', border: 'none', fontSize: 11, padding: '0 2px', textDecoration: 'underline' }}
-                                onClick={() => setRagOpen(true)}
-                              >
-                                {t('goToSettings')}
-                              </button>
-                            </span>
-                          )}
                         </span>
                         <PopoverMenu
                           align="end"
@@ -1802,48 +1768,6 @@ function PanelBody(props: {
                                   entries={addSourceMenu}
                                 />
                               </div>
-                              {selectedBaseLocalModel !== null && localModelStatus !== null && localModelStatus.status !== 'ready' && (
-                                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                                  {localModelStatus.status === 'downloading' ? (
-                                    <>
-                                      <svg width={52} height={52} viewBox="0 0 52 52" aria-hidden="true">
-                                        <circle cx="26" cy="26" r="22" fill="none" stroke={C.border} strokeWidth="5" />
-                                        <circle
-                                          cx="26" cy="26" r="22" fill="none" stroke={C.accent} strokeWidth="5"
-                                          strokeLinecap="round"
-                                          strokeDasharray={`${2 * Math.PI * 22}`}
-                                          strokeDashoffset={`${2 * Math.PI * 22 * (1 - Math.min(1, Math.max(0, localModelStatus.progress / 100)))}`}
-                                          transform="rotate(-90 26 26)"
-                                        />
-                                      </svg>
-                                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{t('localModelDownloadingTitle')}</div>
-                                      <div style={{ fontSize: 12, color: C.muted }}>
-                                        {selectedBaseLocalModel} · {Math.round(localModelStatus.progress)}%
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div style={{ fontSize: 13, fontWeight: 600, color: localModelStatus.status === 'error' ? C.danger : C.text }}>
-                                        {localModelStatus.status === 'error' ? t('localModelErrorTitle') : t('localModelNotReadyTitle')}
-                                      </div>
-                                      <div style={{ fontSize: 12, color: C.muted, maxWidth: 420, textAlign: 'center' }}>
-                                        {localModelStatus.message || t('localModelNotReadyHint')}
-                                      </div>
-                                    </>
-                                  )}
-                                  <button style={{ ...style.button, marginTop: 4 }} onClick={() => setRagOpen(true)}>
-                                    {t('goToSettings')}
-                                  </button>
-                                </div>
-                              )}
-                              {selectedBaseLocalModel === null
-                                && globalConfig !== null
-                                && globalConfig.embeddingProvider === 'local'
-                                && localEmbeddingDownloaded === false && (
-                                <div style={{ ...style.warningHint, marginTop: 14, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', textAlign: 'center' }}>
-                                  {t('embeddingModelMissingHint')}
-                                </div>
-                              )}
                             </div>
                           ) : (
                             <div style={style.empty}>

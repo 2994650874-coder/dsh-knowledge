@@ -104,24 +104,8 @@
     "cherry-studio"
   ],
   "dependencies": {
-    "@firecrawl/anydoc": "^0.1.9",
-    "@huggingface/transformers": "4.3.1",
-    "@napi-rs/canvas": "^1.0.6",
     "jszip": "^3.10.1",
-    "mammoth": "^1.8.0",
-    "mupdf": "^1.28.0",
-    "onnxruntime-node": "1.21.0",
-    "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^4.10.38",
-    "ppu-ocv": "^4.0.0",
-    "ppu-paddle-ocr": "^6.4.0",
-    "tesseract.js": "^7.0.0",
-    "turndown": "^7.2.4",
-    "undici": "^7.30.0",
-    "word-extractor": "^1.0.4"
-  },
-  "optionalDependencies": {
-    "@napi-rs/canvas-win32-x64-msvc": "^1.0.6"
+    "undici": "^7.30.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../dsh/vendor/cordis",
@@ -132,7 +116,6 @@
     "@deepseek-ai/schemastery": "link:../dsh/vendor/schemastery",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
-    "@types/turndown": "^5.0.6",
     "esbuild": "^0.25.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.8",

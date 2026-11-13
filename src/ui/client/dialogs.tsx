@@ -190,7 +190,7 @@ export function TextDocumentDialog(props: {
 
 /** Embedding configuration chosen for the rebuilt base (undefined = keep the source base's config). */
 export interface RestoreEmbeddingConfig {
-  provider: 'openai' | 'ollama' | 'local'
+  provider: 'openai' | 'ollama'
   baseUrl: string
   model: string
   apiKey: string
@@ -206,7 +206,7 @@ export function RestoreBaseDialog(props: {
   const [name, setName] = useState(props.defaultName)
   // Cherry's restore dialog lets the rebuild switch embedding models (the
   // "换模型 → 重建" route); empty model = keep the source base's config.
-  const [provider, setProvider] = useState<'none' | 'openai' | 'ollama' | 'local'>('none')
+  const [provider, setProvider] = useState<'none' | 'openai' | 'ollama'>('none')
   const [model, setModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -230,7 +230,6 @@ export function RestoreBaseDialog(props: {
           <option value="none">{props.t('restoreKeepModel')}</option>
           <option value="openai">{props.t('providerOpenAI')}</option>
           <option value="ollama">Ollama</option>
-          <option value="local">{props.t('providerLocal')}</option>
         </select>
       </div>
       {modelChanged && (
@@ -241,26 +240,14 @@ export function RestoreBaseDialog(props: {
               style={style.input}
               list="kb-restore-model-list"
               value={model}
-              placeholder={provider === 'local' ? 'onnx-community/Qwen3-Embedding-0.6B-ONNX' : 'text-embedding-3-small'}
+              placeholder="text-embedding-3-small"
               onChange={(e) => setModel(e.target.value)}
             />
             <datalist id="kb-restore-model-list">
-              {provider === 'local' && (
-                <>
-                  <option value="onnx-community/Qwen3-Embedding-0.6B-ONNX" />
-                  <option value="Xenova/bge-small-zh-v1.5" />
-                  <option value="Xenova/bge-small-en-v1.5" />
-                  <option value="Xenova/gte-small" />
-                </>
-              )}
-              {provider !== 'local' && (
-                <>
-                  <option value="text-embedding-3-small" />
-                  <option value="text-embedding-3-large" />
-                  <option value="bge-m3" />
-                  <option value="bge-large-zh-v1.5" />
-                </>
-              )}
+              <option value="text-embedding-3-small" />
+              <option value="text-embedding-3-large" />
+              <option value="bge-m3" />
+              <option value="bge-large-zh-v1.5" />
             </datalist>
           </div>
           <div style={style.field}>

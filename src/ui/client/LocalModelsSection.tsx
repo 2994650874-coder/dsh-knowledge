@@ -1,48 +1,32 @@
 /**
- * Cherry Studio-style Local Models settings section: model cards with
- * download / retry / remove actions and a live progress bar, mirroring
- * `LocalModelsSection` + `ModelCard`. The settings shell supplies only the
- * `close` owner prop; data and actions arrive through the inject face.
+ * Ollama model settings: pull / list / remove models through the Ollama API.
+ * The local-model (transformers / ONNX), OCR and MinerU management was removed
+ * on this fork — the knowledge base runs on Ollama embeddings over txt/markdown
+ * only, so those controls had no remaining consumer and their dependencies are
+ * no longer installed.
+ *
+ * Registered through `plugins.bundle.config` (keyed by the npm package name),
+ * so it renders inside the official plugin page instead of the settings shell.
+ * The entry receives `view`; the plugin card's one-line summary is not ours to
+ * draw, so only the detail page renders.
  * @module dsh-knowledge/client/LocalModelsSection
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { KnowledgeApi } from './api.js'
-import type { LocalModelSummary } from './api.js'
 import { C, style } from './theme.js'
-import { IconBot, IconBox, IconDownload, IconFolderInput, IconFolderOpen, IconFolderSearch, IconRefresh, IconScanText, IconTrash, IconX } from './icons.js'
+import { IconBot, IconBox, IconDownload, IconRefresh } from './icons.js'
 import type { Translate } from './locales.js'
-import { MineruDeploymentSection } from './MineruDeploymentSection.js'
-import type { DirectoryActions } from './directory-actions.js'
 
 export interface LocalModelsSectionProps {
-  close: () => void
   api: KnowledgeApi
   t: Translate
-  /** Verified native/host capabilities; picker and opener are independent. */
-  directoryActions?: DirectoryActions
 }
 
 export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element {
-  const { api, t, directoryActions } = props
-  const [models, setModels] = useState<LocalModelSummary[] | null>(null)
+  const { api, t } = props
   const [error, setError] = useState<string | null>(null)
-  /** Success/info line from the last action. Kept apart from `error` so the two
-   *  cannot overwrite each other, and rendered with success styling instead of
-   *  the red error banner. */
-  const [notice, setNotice] = useState<string | null>(null)
-  /** Failure reported by the 1s background poll — the only slot it may clear. */
-  const [pollError, setPollError] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [customRerankerId, setCustomRerankerId] = useState('')
-  const [customRerankerAccepted, setCustomRerankerAccepted] = useState(false)
-  const [mirror, setMirror] = useState('')
-  const [mirrorLoaded, setMirrorLoaded] = useState(false)
-  const [cacheDir, setCacheDir] = useState('')
-  const [workerIdleTimeoutMs, setWorkerIdleTimeoutMs] = useState(60_000)
-  const [ocrStatus, setOcrStatus] = useState<{ status: string; progress: number; message: string }>({ status: 'idle', progress: 0, message: '' })
-  const [ocrBusy, setOcrBusy] = useState(false)
   // Ollama: base URL + model picker + pull progress.
   const [ollamaBase, setOllamaBase] = useState('http://127.0.0.1:11434')
   const [ollamaModel, setOllamaModel] = useState('')
@@ -53,39 +37,8 @@ export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element 
   // Survives panel close/reopen via listActiveOllamaPulls() on mount.
   const [pullingModels, setPullingModels] = useState<Array<{ model: string; status: string; progress: number; message: string }>>([])
   const [ollamaBusy, setOllamaBusy] = useState(false)
-  // Recommended Ollama models (embedding + vision), mirroring the local-model registry posture.
+  // Recommended Ollama models (embedding + vision).
   const [ollamaSuggestions, setOllamaSuggestions] = useState<{ ollamaEmbedding: string[]; ollamaVision: string[] }>({ ollamaEmbedding: [], ollamaVision: [] })
-
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      const [next, ocr] = await Promise.all([api.listLocalModels(), api.getOcrStatus()])
-      setModels(next)
-      setOcrStatus(ocr)
-      // The poll clears only ITS OWN failure slot. Clearing the shared error slot
-      // here erased every action's message within a second (the poll runs every
-      // second, and several actions call refresh() in their own finally), so a
-      // failed download looked like it had silently succeeded.
-      setPollError(null)
-    } catch (err) {
-      setPollError(err instanceof Error ? err.message : String(err))
-    }
-  }, [api])
-
-  useEffect(() => {
-    void refresh()
-    const timer = window.setInterval(() => { void refresh() }, 1000)
-    return () => window.clearInterval(timer)
-  }, [refresh])
-
-  // Load the current mirror + cache-dir settings once.
-  useEffect(() => {
-    void api.getConfig().then(config => {
-      setMirror(config.hfEndpoint)
-      setCacheDir(config.localModelCacheDir)
-      setWorkerIdleTimeoutMs(config.localWorkerIdleTimeoutMs)
-      setMirrorLoaded(true)
-    }).catch(() => { setMirrorLoaded(true) })
-  }, [api])
 
   // Load the Ollama recommendations once.
   useEffect(() => {
@@ -96,99 +49,6 @@ export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element 
       })
     }).catch(() => {})
   }, [api])
-
-  const saveMirror = useCallback(async (): Promise<void> => {
-    setError(null)
-    try {
-      await api.setConfig({ hfEndpoint: mirror.trim() })
-      setMirror(mirror.trim())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [api, mirror])
-
-  const saveCacheDir = useCallback(async (): Promise<void> => {
-    setError(null)
-    setNotice(null)
-    try {
-      await api.setConfig({ localModelCacheDir: cacheDir.trim() })
-      setCacheDir(cacheDir.trim())
-      // Saving only points the config at the new directory; the files stay
-      // where they are. Say so explicitly — a silent save read as "no
-      // reaction" and left users believing the models had moved.
-      setNotice(t('cacheDirSaved'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [api, cacheDir, t])
-
-  const saveWorkerIdleTimeout = useCallback(async (): Promise<void> => {
-    setError(null)
-    try {
-      const config = await api.setConfig({ localWorkerIdleTimeoutMs: workerIdleTimeoutMs })
-      setWorkerIdleTimeoutMs(config.localWorkerIdleTimeoutMs)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [api, workerIdleTimeoutMs])
-
-  const browseCacheDir = useCallback(async (): Promise<void> => {
-    setError(null)
-    setNotice(null)
-    if (typeof directoryActions?.pickDirectory !== 'function') {
-      setNotice(t('cacheDirPickUnavailable'))
-      return
-    }
-    try {
-      const picked = await directoryActions.pickDirectory()
-      if (picked !== null) setCacheDir(picked)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [directoryActions, t])
-
-  const openCacheDir = useCallback(async (): Promise<void> => {
-    setError(null)
-    setNotice(null)
-    if (typeof directoryActions?.openPath !== 'function') {
-      setNotice(t('cacheDirOpenUnavailable'))
-      return
-    }
-    try {
-      if (typeof directoryActions.canOpenPath === 'function' && !await directoryActions.canOpenPath()) {
-        setNotice(t('cacheDirOpenUnavailable'))
-        return
-      }
-      // The backend resolves DSH_HOME, the configured default, and '~'. DSH 0.2's
-      // opener expects an absolute path, and a first-time cache may not exist.
-      const { path } = await api.prepareLocalModelCacheDirectory(cacheDir.trim())
-      await directoryActions.openPath(path)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [directoryActions, api, cacheDir, t])
-
-  const [migrating, setMigrating] = useState(false)
-  const migrateCacheDir = useCallback(async (): Promise<void> => {
-    setMigrating(true)
-    setError(null)
-    setNotice(null)
-    try {
-      const result = await api.migrateLocalModels(cacheDir.trim())
-      setCacheDir(result.to)
-      if (result.moved > 0) {
-        setNotice(t('cacheDirMigrated').replace('{count}', String(result.moved)).replace('{to}', result.to))
-      } else {
-        // Also silent before: a no-op migration (same dir, or the target
-        // already holds the entries) showed nothing at all.
-        setNotice(t('cacheDirMigrateNone'))
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setMigrating(false)
-    }
-  }, [api, cacheDir, t])
 
   const refreshOllamaTags = useCallback(async (): Promise<void> => {
     setOllamaBusy(true)
@@ -298,279 +158,12 @@ export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element 
     setOllamaBusy(false)
   }, [api])
 
-  const download = useCallback(async (id: string): Promise<void> => {
-    setBusyId(id)
-    setError(null)
-    try {
-      await api.downloadLocalModel(id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusyId(null)
-      void refresh()
-    }
-  }, [api, refresh])
-
-  const cancel = useCallback(async (id: string): Promise<void> => {
-    setError(null)
-    try {
-      await api.cancelLocalModel(id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      void refresh()
-    }
-  }, [api, refresh])
-
-  const remove = useCallback(async (id: string): Promise<void> => {
-    setBusyId(id)
-    setError(null)
-    try {
-      await api.removeLocalModel(id)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusyId(null)
-    }
-  }, [api, refresh])
-
-  const registerCustomReranker = useCallback(async (): Promise<void> => {
-    const id = customRerankerId.trim()
-    if (id === '') return
-    setBusyId(id)
-    setError(null)
-    try {
-      await api.registerCustomLocalReranker(id)
-      setCustomRerankerId('')
-      setCustomRerankerAccepted(false)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusyId(null)
-    }
-  }, [api, customRerankerId, refresh])
-
-  const selfTest = useCallback(async (id: string): Promise<void> => {
-    setBusyId(id)
-    setError(null)
-    try {
-      await api.selfTestLocalModel(id)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusyId(null)
-    }
-  }, [api, refresh])
-
-  const downloadOcr = useCallback(async (): Promise<void> => {
-    setOcrBusy(true)
-    setError(null)
-    try {
-      await api.downloadOcr()
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setOcrBusy(false)
-    }
-  }, [api, refresh])
-
-  const removeOcr = useCallback(async (): Promise<void> => {
-    setOcrBusy(true)
-    setError(null)
-    try {
-      await api.removeOcr()
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setOcrBusy(false)
-    }
-  }, [api, refresh])
-
-  const ocrReady = ocrStatus.status === 'ready'
-
   return (
     <div style={{ minWidth: 0 }}>
       <h2 style={{ fontSize: 17, fontWeight: 650, color: C.text, margin: '0 0 6px' }}>{t('localModelsTitle')}</h2>
       <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: C.muted, lineHeight: 1.65, maxWidth: 760 }}>{t('localModelsDesc')}</p>
-      <MineruDeploymentSection api={api} t={t} pickDirectory={typeof directoryActions?.pickDirectory === 'function' ? directoryActions.pickDirectory.bind(directoryActions) : undefined} />
-
-      {mirrorLoaded && (
-        <div style={{ marginBottom: 14, padding: 16, border: `1px solid ${C.border}`, borderRadius: 12, background: C.surface }}>
-          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('hfMirror')}</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              style={style.input}
-              placeholder="https://hf-mirror.com"
-              value={mirror}
-              onChange={(e) => setMirror(e.target.value)}
-            />
-            <button className="kb-btn" style={style.button} onClick={() => void saveMirror()}>{t('hfMirrorSave')}</button>
-          </div>
-          <p style={{ marginTop: 8, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{t('hfMirrorHint')}</p>
-        </div>
-      )}
-
-      {mirrorLoaded && (
-        <div style={{ marginBottom: 14, padding: 16, border: `1px solid ${C.border}`, borderRadius: 12, background: C.surface }}>
-          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('cacheDirTitle')}</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              style={{ ...style.input, flex: '1 1 260px', minWidth: 0 }}
-              placeholder="C:\\Users\\you\\.dsh\\cache\\dsh-knowledge\\local-models"
-              value={cacheDir}
-              onChange={(e) => setCacheDir(e.target.value)}
-            />
-            <button className="kb-btn" style={style.button} onClick={() => void browseCacheDir()}><IconFolderSearch size={13} /> {t('cacheDirBrowse')}</button>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <button className="kb-btn" style={style.button} onClick={() => void saveCacheDir()}>{t('hfMirrorSave')}</button>
-            <button className="kb-btn" style={style.button} disabled={migrating} onClick={() => void migrateCacheDir()}>
-              <IconFolderInput size={13} /> {t('cacheDirMigrate')}
-            </button>
-            <button className="kb-btn" style={style.button} onClick={() => void openCacheDir()}><IconFolderOpen size={13} /> {t('cacheDirOpen')}</button>
-          </div>
-          <p style={{ marginTop: 8, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{t('cacheDirHint')}</p>
-        </div>
-      )}
-
-      {mirrorLoaded && (
-        <div style={{ marginBottom: 14, padding: 16, border: `1px solid ${C.border}`, borderRadius: 12, background: C.surface }}>
-          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('localWorkerIdleTimeoutMs')}</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              style={{ ...style.input, flex: '1 1 240px', minWidth: 0 }}
-              type="number"
-              min={0}
-              max={86_400_000}
-              step={60_000}
-              value={workerIdleTimeoutMs}
-              onChange={(e) => {
-                const next = Number(e.target.value)
-                if (Number.isFinite(next)) setWorkerIdleTimeoutMs(next)
-              }}
-            />
-            <button className="kb-btn" style={style.button} onClick={() => void saveWorkerIdleTimeout()}>{t('hfMirrorSave')}</button>
-          </div>
-          <p style={{ marginTop: 8, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{t('localWorkerIdleTimeoutMsHint')}</p>
-        </div>
-      )}
-
-      {notice !== null && (
-        <div style={{ ...style.error, color: C.success, background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary, #30a46c) 10%, transparent)', marginBottom: 12 }}>{notice}</div>
-      )}
 
       {error !== null && <div style={{ ...style.error, marginBottom: 12 }}>{error}</div>}
-
-      {pollError !== null && (
-        <div style={{ ...style.error, marginBottom: 12 }}>{t('statusPollFailed')}: {pollError}</div>
-      )}
-
-      <div style={{ marginBottom: 16, padding: 16, border: `1px solid ${C.border}`, borderRadius: 12, background: C.surface }}>
-        <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('customRerankTitle')}</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input
-            style={{ ...style.input, flex: '1 1 260px', minWidth: 0 }}
-            placeholder="owner/onnx-reranker-model"
-            value={customRerankerId}
-            onChange={(event) => setCustomRerankerId(event.target.value)}
-          />
-          <button className="kb-btn" style={style.button} disabled={customRerankerId.trim() === '' || !customRerankerAccepted || busyId !== null} onClick={() => void registerCustomReranker()}>
-            <IconDownload size={13} /> {t('customRerankAdd')}
-          </button>
-        </div>
-        <p style={{ marginTop: 8, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{t('customRerankHint')}</p>
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-          <input type="checkbox" checked={customRerankerAccepted} onChange={(event) => setCustomRerankerAccepted(event.target.checked)} />
-          {t('customRerankAccept')}
-        </label>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 14 }}>
-        {(models ?? []).map(model => (
-          <ModelCard
-            key={model.id}
-            model={model}
-            t={t}
-            busy={busyId === model.id}
-            onDownload={() => void download(model.id)}
-            onCancel={() => void cancel(model.id)}
-            onRemove={() => void remove(model.id)}
-            onSelfTest={() => void selfTest(model.id)}
-          />
-        ))}
-        {models !== null && models.length === 0 && (
-          <div style={style.empty}>{t('noLocalModels')}</div>
-        )}
-      </div>
-
-      {/* Local OCR — scanned PDFs (Cherry's local-document posture) */}
-      <div style={{ ...cardStyle, marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40,
-              borderRadius: 12, flexShrink: 0, background: ocrReady ? accentSoft : C.surface2,
-              color: ocrReady ? C.accent : C.muted,
-            }}
-          >
-            <IconScanText size={18} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{t('ocrTitle')}</span>
-              {ocrReady && <span style={readyBadge}>{t('ready')}</span>}
-            </div>
-            <p style={{ marginTop: 2, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{t('ocrDesc')}</p>
-          </div>
-          {ocrReady && (
-            <button
-              className="kb-dangerbtn"
-              style={style.iconOnlyButton}
-              title={t('ocrRemove')}
-              aria-label={t('ocrRemove')}
-              disabled={ocrBusy}
-              onClick={() => void removeOcr()}
-            >
-              <IconTrash size={14} />
-            </button>
-          )}
-        </div>
-
-        {ocrStatus.status === 'error' && ocrStatus.message !== '' && (
-          <p style={{ marginTop: 8, fontSize: 12, color: C.danger, lineHeight: 1.5 }}>{ocrStatus.message}</p>
-        )}
-
-        {ocrStatus.status === 'downloading' && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ height: 6, width: '100%', borderRadius: 999, background: C.surface2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${ocrStatus.progress}%`, borderRadius: 999, background: C.accent, transition: 'width 0.2s' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: C.muted }}>
-              <span>{t('localModelDownloading')}</span>
-              <span>{Math.floor(ocrStatus.progress)}%</span>
-            </div>
-          </div>
-        )}
-
-        {!ocrReady && ocrStatus.status !== 'downloading' && (
-          <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-            <button
-              className="kb-btn"
-              style={{ ...style.button, width: '100%', justifyContent: 'center' }}
-              disabled={ocrBusy}
-              onClick={() => void downloadOcr()}
-            >
-              {ocrStatus.status === 'error' ? <IconRefresh size={13} /> : <IconDownload size={13} />}
-              {ocrStatus.status === 'error' ? t('localModelRetry') : t('ocrDownload')}
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* Ollama — pull local models through the Ollama API (embeddings, VLMs) */}
       <div style={{ ...cardStyle, marginTop: 16 }}>
@@ -684,7 +277,7 @@ export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element 
                 style={{ border: 0, padding: '2px 8px', borderRadius: 6, background: C.surface, color: C.text, cursor: 'pointer', fontSize: 11 }}
                 onClick={() => void cancelOllama(pull.model)}
               >
-                {pull.status === 'error' ? t('localModelCancel') : t('localModelCancel')}
+                {t('localModelCancel')}
               </button>
             </div>
             {pull.status !== 'error' ? (
@@ -707,119 +300,11 @@ export function LocalModelsSection(props: LocalModelsSectionProps): JSX.Element 
   )
 }
 
-function ModelCard(props: {
-  model: LocalModelSummary
-  t: Translate
-  busy: boolean
-  onDownload: () => void
-  onCancel: () => void
-  onRemove: () => void
-  onSelfTest: () => void
-}): JSX.Element {
-  const { model, t, busy, onDownload, onCancel, onRemove, onSelfTest } = props
-  const ready = model.status === 'ready'
-  const downloading = model.status === 'downloading'
-  const inProgress = downloading || model.status === 'validating'
-  const failed = model.status === 'error' || model.status === 'unhealthy'
-
-  return (
-    <div style={{ ...cardStyle, ...(ready ? {} : {}) }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40,
-            borderRadius: 12, flexShrink: 0,
-            background: ready ? accentSoft : C.surface2,
-            color: ready ? C.accent : C.muted,
-          }}
-        >
-          <IconBox size={20} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {model.name}
-            </span>
-            {ready && (
-              <span style={readyBadge}>{t('ready')}</span>
-            )}
-            {model.support !== undefined && <span style={readyBadge}>{t(model.support === 'official' ? 'officialSupport' : 'experimentalSupport')}</span>}
-          </div>
-          <p style={{ marginTop: 2, fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {model.subtitle}
-          </p>
-          {model.kind === 'reranking' && model.lastCheckedAt !== undefined && (
-            <p style={{ marginTop: 4, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{t('rerankLastValidated')}{new Date(model.lastCheckedAt).toLocaleString()} · {model.latencyMs ?? 0}ms</p>
-          )}
-        </div>
-        {ready && <div style={{ display: 'flex', gap: 4 }}>
-          {model.kind === 'reranking' && <button className="kb-btn" style={style.iconOnlyButton} title={t('rerankRevalidate')} aria-label={t('rerankRevalidate')} disabled={busy} onClick={onSelfTest}><IconRefresh size={14} /></button>}
-          <button className="kb-dangerbtn" style={style.iconOnlyButton} title={t('localModelRemove')} aria-label={t('localModelRemove')} disabled={busy} onClick={onRemove}><IconTrash size={14} /></button>
-        </div>}
-      </div>
-
-      {failed && (
-        <p style={{ marginTop: 8, fontSize: 12, color: C.danger, lineHeight: 1.5 }}>
-          {model.message !== '' ? model.message : t('localModelError')}
-        </p>
-      )}
-
-      {inProgress && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ height: 6, width: '100%', borderRadius: 999, background: C.surface2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${model.progress}%`, borderRadius: 999, background: C.accent, transition: 'width 0.2s' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: C.muted }}>
-            <span>{model.status === 'validating' ? t('rerankValidating') : t('localModelDownloading')}</span>
-            <span>{Math.floor(model.progress)}%</span>
-          </div>
-          {downloading && <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-            <button
-              className="kb-btn"
-              style={{ ...style.button, width: '100%', justifyContent: 'center' }}
-              disabled={busy}
-              onClick={onCancel}
-            >
-              <IconX size={13} />{t('localModelCancel')}
-            </button>
-          </div>}
-        </div>
-      )}
-
-      {!ready && !inProgress && (
-        <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-          <button
-            className="kb-btn"
-            style={{ ...style.button, width: '100%', justifyContent: 'center' }}
-            disabled={busy}
-            onClick={model.kind === 'reranking' && model.status === 'unhealthy' ? onSelfTest : onDownload}
-          >
-            {failed ? <IconRefresh size={13} /> : <IconDownload size={13} />}
-            {model.kind === 'reranking' && model.status === 'unhealthy' ? t('rerankRevalidate') : failed ? t('localModelRetry') : t('localModelDownload')}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
 const cardStyle: CSSProperties = {
   border: `1px solid ${C.border}`,
   borderRadius: 12,
   padding: 16,
   background: C.surface,
-}
-
-const accentSoft = 'color-mix(in srgb, var(--dsw-alias-brand-primary, #3b6ef6) 10%, transparent)'
-
-const readyBadge: CSSProperties = {
-  fontSize: 12,
-  lineHeight: 1.5,
-  padding: '0 6px',
-  borderRadius: 999,
-  background: C.surface2,
-  color: C.muted,
-  flexShrink: 0,
 }
 
 /** Human-readable size (Ollama reports bytes; show GB/MB). */

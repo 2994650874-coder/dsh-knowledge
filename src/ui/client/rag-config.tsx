@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { KnowledgeApi } from './api.js'
-import type { BaseConfig, BaseSummary, EmbeddingProvider, KnowledgeConfig, LocalModelStatus, ModelSuggestions } from './api.js'
+import type { BaseConfig, BaseSummary, EmbeddingProvider, KnowledgeConfig, ModelSuggestions } from './api.js'
 import { C, style } from './theme.js'
 import { IconRefresh } from './icons.js'
 import type { Translate } from './locales.js'
@@ -30,11 +30,9 @@ export function RagConfigPanel(props: PanelProps): JSX.Element {
     ...(base.config ?? {}),
   }))
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [localStatus, setLocalStatus] = useState<LocalModelStatus | null>(null)
   const [suggestions, setSuggestions] = useState<ModelSuggestions>({ embedding: [], local: [], rerank: [], ollamaEmbedding: [], ollamaVision: [] })
   // Models actually downloaded/installed on this machine — the pickers below
   // are dropdowns over these lists, not free-typed names.
-  const [readyLocalEmbeddings, setReadyLocalEmbeddings] = useState<string[]>([])
   const [readyLocalRerankers, setReadyLocalRerankers] = useState<string[]>([])
   const [ollamaEmbeddingModels, setOllamaEmbeddingModels] = useState<string[]>([])
   const [ollamaCaptionModels, setOllamaCaptionModels] = useState<string[]>([])
@@ -56,15 +54,13 @@ export function RagConfigPanel(props: PanelProps): JSX.Element {
     return () => { cancelled = true }
   }, [api])
 
-  // Downloaded local models (Settings → Local Models): ready embedding
-  // models feed the `local` embedding dropdown, ready rerankers the rerank
-  // suggestions (as `local:` prefixed ids).
+  // Downloaded local rerankers (Settings → Local Models): ready rerankers
+  // feed the rerank suggestions (as `local:` prefixed ids).
   useEffect(() => {
     let cancelled = false
     void api.listLocalModels().then(list => {
       if (cancelled) return
       const ready = list.filter(m => m.status === 'ready').map(m => ({ id: m.id, kind: m.kind as string }))
-      setReadyLocalEmbeddings(ready.filter(m => m.kind === 'embedding').map(m => m.id))
       setReadyLocalRerankers(ready.filter(m => m.kind === 'reranking').map(m => m.id))
     }).catch(() => {})
     return () => { cancelled = true }
@@ -122,23 +118,6 @@ export function RagConfigPanel(props: PanelProps): JSX.Element {
   }, [api, values.imageCaptionBaseUrl])
 
   const listId = (kind: 'embedding' | 'local' | 'rerank'): string => `kb-${kind}-models-${base.id}`
-
-  useEffect(() => {
-    if (values.embeddingProvider !== 'local') { setLocalStatus(null); return }
-    let cancelled = false
-    const model = values.embeddingModel.trim() === '' ? 'onnx-community/Qwen3-Embedding-0.6B-ONNX' : values.embeddingModel.trim()
-    const poll = async (): Promise<void> => {
-      try {
-        const status = await api.getLocalModelStatus(model)
-        if (!cancelled) setLocalStatus(status)
-      } catch {
-        // keep the last known status on transient failures
-      }
-    }
-    void poll()
-    const timer = window.setInterval(() => { void poll() }, 800)
-    return () => { cancelled = true; window.clearInterval(timer) }
-  }, [api, values.embeddingProvider, values.embeddingModel])
 
   const initial = useMemo<KnowledgeConfig>(() => ({
     ...globalConfig,
@@ -404,20 +383,9 @@ export function RagConfigPanel(props: PanelProps): JSX.Element {
             value={values.embeddingProvider}
             onChange={(e) => {
               const provider = e.target.value as EmbeddingProvider
-              if (provider === 'local') {
-                // Keep the current model only when it is actually a
-                // downloaded local model; otherwise auto-pick the first
-                // ready one (or leave it unset). Never inject a default name
-                // the user has not downloaded — that made the dropdown show
-                // a model that does not exist.
-                const next = readyLocalEmbeddings.includes(values.embeddingModel)
-                  ? values.embeddingModel
-                  : (readyLocalEmbeddings[0] ?? '')
-                patch({ embeddingProvider: provider, embeddingModel: next })
-              } else if (provider === 'ollama') {
-                // Same for Ollama: a leftover name from another provider
-                // (e.g. a local model id) must not appear in the Ollama
-                // dropdown as if it were installed there.
+              if (provider === 'ollama') {
+                // A leftover name from another provider must not appear in the
+                // Ollama dropdown as if it were installed there.
                 const next = ollamaEmbeddingModels.includes(values.embeddingModel)
                   ? values.embeddingModel
                   : (ollamaEmbeddingModels[0] ?? '')
@@ -437,58 +405,7 @@ export function RagConfigPanel(props: PanelProps): JSX.Element {
             <option value="none">{t('providerNone')}</option>
             <option value="openai">{t('providerOpenAI')}</option>
             <option value="ollama">{t('providerOllama')}</option>
-            <option value="local">{t('providerLocal')}</option>
           </select>
-          {values.embeddingProvider === 'local' && (
-            <div style={{ marginTop: 10 }}>
-              <label style={style.label}>{t('embeddingModel')}</label>
-              <select
-                style={style.input}
-                value={readyLocalEmbeddings.includes(values.embeddingModel) ? values.embeddingModel : ''}
-                onChange={(e) => { if (e.target.value !== '') patch({ embeddingModel: e.target.value }) }}
-              >
-                {readyLocalEmbeddings.length === 0 && (
-                  <option value="">{t('noLocalModelsReady')}</option>
-                )}
-                {/* A stale/unset value must show as its own option — without
-                    this, an empty value makes the browser display the FIRST
-                    list entry as if it were selected while the saved config
-                    stays empty (the 'selection' then never applies). A stale
-                    name is marked 未安装 so it is not mistaken for a real
-                    installed model. */}
-                {!readyLocalEmbeddings.includes(values.embeddingModel) && (
-                  <option value="">
-                    {values.embeddingModel.trim() !== ''
-                      ? `${values.embeddingModel}${t('staleModelSuffix')}`
-                      : t('selectModelPlaceholder')}
-                  </option>
-                )}
-                {readyLocalEmbeddings.map(id => <option key={id} value={id}>{id}</option>)}
-              </select>
-              {localStatus !== null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
-                  {localStatus.status === 'downloading' && (
-                    <>
-                      <span className="kb-spinner" style={style.spinner} />
-                      <span style={{ color: C.accent }}>{t('localModelDownloading')} {Math.floor(localStatus.progress)}%</span>
-                      <div style={{ flex: 1, height: 4, borderRadius: 2, background: C.surface2 }}>
-                        <div style={{ width: `${localStatus.progress}%`, height: 4, borderRadius: 2, background: C.accent }} />
-                      </div>
-                    </>
-                  )}
-                  {localStatus.status === 'ready' && (
-                    <span style={{ color: C.success }}>✓ {t('localModelReady')}</span>
-                  )}
-                  {localStatus.status === 'error' && (
-                    <span style={{ color: C.danger }} title={localStatus.message}>✕ {t('localModelError')}</span>
-                  )}
-                  {localStatus.status === 'idle' && (
-                    <span style={{ color: C.muted }}>{t('localModelHint')}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
           {values.embeddingProvider === 'ollama' && (
             <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>

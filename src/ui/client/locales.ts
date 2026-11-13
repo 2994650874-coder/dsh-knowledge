@@ -225,8 +225,6 @@ export type KnowledgeKey =
   | 'chunkChangeWarning'
   | 'topKHint'
   | 'thresholdHint'
-  | 'providerLocal'
-  | 'noLocalModelsReady'
   | 'noOllamaModels'
   | 'selectModelPlaceholder'
   | 'ollamaUnreachable'
@@ -604,10 +602,8 @@ export const zh: Record<KnowledgeKey, string> = {
   chunkChangeWarning: '分块设置的修改只针对新添加的内容有效',
   topKHint: '每次召回返回的最大文档片段数，越大覆盖越多但消耗更多上下文。',
   thresholdHint: '用于过滤低相关性重排片段的相似度阈值，数值越高召回越严格。',
-  providerLocal: '本地模型',
   localModelHint: '进程内推理（transformers.js），无需联网服务；首次使用需下载模型权重。模型为 Hugging Face 仓库 id，默认 onnx-community/Qwen3-Embedding-0.6B-ONNX',
-  noLocalModelsReady: '暂无已下载的本地模型，请到「设置 → 本地模型」下载',
-  noOllamaModels: '暂无已安装的 Ollama 模型，请在「设置 → 本地模型」拉取',
+  noOllamaModels: '暂无已安装的 Ollama 模型，请在「设置 → Ollama 模型」拉取',
   selectModelPlaceholder: '请选择模型',
   ollamaUnreachable: '无法连接 Ollama（检查地址或是否已启动）',
   embeddingSwitchWarning: '⚠ 切换嵌入模型会使本库已有向量全部失效，保存会被拒绝——请改用「重建知识库」以新模型重建（或先清空本库文档）',
@@ -628,9 +624,9 @@ export const zh: Record<KnowledgeKey, string> = {
   localModelReady: '本地模型就绪',
   localModelDownloading: '模型下载中',
   localModelError: '模型加载失败',
-  localModelsNav: '本地模型',
-  localModelsTitle: '本地模型',
-  localModelsDesc: '下载、验证并管理本地嵌入和重排模型；只有通过健康检查的重排模型才会出现在知识库设置中。',
+  localModelsNav: 'Ollama 模型',
+  localModelsTitle: 'Ollama 模型与文档处理',
+  localModelsDesc: '通过 Ollama API 下载、查看和删除模型，并配置 MinerU 文档解析部署。嵌入提供方请在各知识库的 RAG 配置里选 Ollama。',
   localModelDownload: '下载',
   localModelRetry: '重试',
   localModelRemove: '删除',
@@ -990,10 +986,8 @@ export const en: Record<KnowledgeKey, string> = {
   chunkChangeWarning: 'Chunking changes only apply to newly added content',
   topKHint: 'Maximum number of document chunks returned for each retrieval. Higher values cover more content but use more context.',
   thresholdHint: 'Similarity threshold used to filter low-relevance reranked chunks; higher is stricter.',
-  providerLocal: 'Local model',
   localModelHint: 'In-process inference (transformers.js), no server needed; first use downloads the weights. Model = Hugging Face repo id, default onnx-community/Qwen3-Embedding-0.6B-ONNX',
-  noLocalModelsReady: 'No downloaded local models — download one in Settings → Local Models',
-  noOllamaModels: 'No installed Ollama models — pull one in Settings → Local Models',
+  noOllamaModels: 'No installed Ollama models — pull one in Settings → Ollama Models',
   selectModelPlaceholder: 'Select a model',
   ollamaUnreachable: 'Cannot reach Ollama (check the address or whether it is running)',
   embeddingSwitchWarning: '⚠ Switching the embedding model invalidates this base\'s stored vectors, so the save will be refused — rebuild via \u201cRebuild base\u201d with the new model instead (or empty the base first)',
@@ -1014,9 +1008,9 @@ export const en: Record<KnowledgeKey, string> = {
   localModelReady: 'Local model ready',
   localModelDownloading: 'Downloading model',
   localModelError: 'Model load failed',
-  localModelsNav: 'Local Models',
-  localModelsTitle: 'Local Models',
-  localModelsDesc: 'Download, validate, and manage local embedding and rerank models. Only healthy rerankers appear in base settings.',
+  localModelsNav: 'Ollama Models',
+  localModelsTitle: 'Ollama models & document processing',
+  localModelsDesc: 'Pull, inspect and delete models through the Ollama API, and configure the MinerU document-parsing deployment. Pick Ollama as the embedding provider in each base\'s RAG settings.',
   localModelDownload: 'Download',
   localModelRetry: 'Retry',
   localModelRemove: 'Remove',

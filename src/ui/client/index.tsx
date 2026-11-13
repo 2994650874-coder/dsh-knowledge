@@ -16,7 +16,6 @@ import { KnowledgePanel, SidebarKnowledgeAction } from './KnowledgeSection.js'
 import type { Translate } from './KnowledgeSection.js'
 import { LocalModelsSection } from './LocalModelsSection.js'
 import { en, zh } from './locales.js'
-import { createDirectoryActions } from './directory-actions.js'
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'settings.knowledge'
@@ -133,28 +132,21 @@ export function apply(ctx: Context): void {
     }),
   }, SidebarKnowledgeAction))
 
-  slots.inject('settings.section', () => slots.register({
-    name: 'settings.section',
-    id: 'local-models',
-    order: 60,
-    label: () => t('localModelsNav'),
-    inject: () => ({
-      api,
-      t,
-      // Root slot props are cached. Resolve optional services again on each
-      // capability read and action so late registration/HMR stays usable.
-      directoryActions: createDirectoryActions(() => ({
-        nativePicker: (globalThis as typeof globalThis & { __DSH_DIRECTORY_PICKER__?: unknown }).__DSH_DIRECTORY_PICKER__,
-        uiWorkspace: ctx.get('uiWorkspace'),
-        // `remote.session` is a scoped Remote service: reading `.session` off
-        // the `remote` service object is gated by the fiber's inject
-        // declaration and throws `cannot get property "remote.session"
-        // without inject`, crashing this whole slot (issue #47). The optional
-        // `ctx.get('remote.session')` lookup resolves the namespace directly
-        // and stays undefined on DSH generations that do not provide it.
-        remote: { session: ctx.get('remote.session') },
-        workspaces: ctx.get('workspaces'),
-      })),
-    }),
-  }, LocalModelsSection))
+  // Ollama model management lives inside the official plugin page, keyed by the
+  // npm package name (`plugins.bundle.config`). It deliberately does NOT register
+  // a `settings.section`: the settings page belongs to the host, and a plugin
+  // configures itself through its own plugin card (same posture as the session
+  // translator and grokbot).
+  //
+  // The entry is called with `{ view }`: `'summary'` is the one-line blurb on
+  // the plugin card and stays the host's business, so only the detail page
+  // renders. Returning `null` for the summary is what grokbot does; omitting the
+  // check would paint the whole form inside the card.
+  slots.inject('plugins.bundle.config', () => slots.register({
+    name: 'plugins.bundle.config',
+    key: 'dsh-knowledge',
+  }, function KnowledgeConfig({ view }: { view?: string }) {
+    if (view === 'summary') return null
+    return <LocalModelsSection api={api} t={t} />
+  } as never))
 }
