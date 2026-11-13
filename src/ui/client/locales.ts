@@ -11,9 +11,7 @@ export type KnowledgeKey =
   | 'processingTimeout' | 'structuredChunking' | 'structuredChunkingHint'
   | 'processingInfo' | 'processingComplete' | 'processingPartial' | 'processingUnknown' | 'processingReused'
   | 'reparseDocument' | 'rechunkDocument' | 'evidence' | 'evidenceEmpty' | 'evidenceNext'
-  | 'pythonDetect' | 'pythonPath' | 'pythonVerify' | 'pythonChoose' | 'pythonEligible' | 'pythonMissing' | 'pythonLimited' | 'pythonHint' | 'pythonStages' | 'pythonRemembered' | 'pythonRefreshHint' | 'pythonManualHint' | 'pythonOtherDetected' | 'pythonDetectedDetails' | 'pythonSource' | 'pythonVersion' | 'pythonArchitecture' | 'pythonStepInterpreter' | 'pythonStepEnvironment' | 'pythonStepDependencies' | 'pythonStepInference' | 'pythonReasonProbe' | 'pythonReasonVersion' | 'pythonReasonImplementation' | 'pythonReasonArchitecture' | 'pythonReasonPrerelease' | 'pythonReasonThreaded' | 'pythonReasonVenv' | 'pythonReasonPip'
-  | 'evidenceBack' | 'evidenceRetry' | 'mineruDeployTitle' | 'mineruDeployDescription' | 'mineruDeployRoot' | 'mineruDeployExisting' | 'mineruDeployBrowse' | 'mineruDeployCheck' | 'mineruDeployChecking' | 'mineruDeployTotal' | 'mineruDeployReuse' | 'mineruDeployRemaining' | 'mineruDeployUnknownRuntime' | 'mineruDeployIncomplete' | 'mineruDeploySpace' | 'mineruDeployPreflightOnly' | 'mineruDownloadSource' | 'mineruPythonSource' | 'mineruPythonSourceHint' | 'mineruSaveSource' | 'mineruCurrentInstall'
-  | 'mineruPhaseAbsent' | 'mineruPhaseEnvironment' | 'mineruPhaseProbe' | 'mineruPhaseReady' | 'mineruPhaseInterrupted' | 'mineruServiceRunning' | 'mineruServiceStarting' | 'mineruServiceStopping' | 'mineruServiceError' | 'mineruServiceStopped' | 'mineruCancelTask' | 'mineruStart' | 'mineruStop' | 'mineruUse' | 'mineruApplied' | 'mineruExternalCopy' | 'mineruPrepare' | 'mineruManagedPreview' | 'mineruConfirmPreparation' | 'mineruNotNow' | 'mineruConfirm'
+  | 'evidenceBack' | 'evidenceRetry'
   | 'sourcePage' | 'sourceBlock' | 'sourceRegion' | 'sourceAsset' | 'sourceUnavailable'
   | 'stageQueued' | 'stageChecking' | 'stageUploading' | 'stageParsing' | 'stageDownloading'
   | 'stageNormalizing' | 'stageIndexing' | 'stageCompleted' | 'stageFailed' | 'stageCanceled'
@@ -65,10 +63,6 @@ export type KnowledgeKey =
   | 'dragToUpload'
   | 'pdfTooLarge'
   | 'pdfPreviewFailed'
-  | 'ocrTitle'
-  | 'ocrDesc'
-  | 'ocrDownload'
-  | 'ocrRemove'
   | 'processorBuiltinDesc'
   | 'processorMineruDesc'
   | 'perBaseHint'
@@ -190,20 +184,11 @@ export type KnowledgeKey =
   | 'injectUsagePromptHint'
   | 'autoRetrieveWeight'
   | 'autoRetrieveWeightHint'
-  | 'localWorkerIdleTimeoutMs'
-  | 'localWorkerIdleTimeoutMsHint'
   | 'resumeInterruptedHint'
   | 'imageCaptionHint'
   | 'imageCaptionOff'
   | 'imageCaptionOpenAI'
   | 'imageCaptionOllama'
-  | 'cacheDirTitle'
-  | 'cacheDirHint'
-  | 'cacheDirBrowse'
-  | 'cacheDirMigrate'
-  | 'cacheDirOpen'
-  | 'cacheDirSaved'
-  | 'cacheDirMigrateNone'
   | 'ollamaTitle'
   | 'ollamaDesc'
   | 'ollamaInstalledTitle'
@@ -230,43 +215,19 @@ export type KnowledgeKey =
   | 'ollamaUnreachable'
   | 'embeddingSwitchWarning'
   | 'staleModelSuffix'
-  | 'embeddingModelMissingHint'
-  | 'localModelStatusLabel'
-  | 'goToSettings'
-  | 'localModelDownloadingTitle'
-  | 'localModelNotReadyTitle'
-  | 'localModelNotReadyHint'
-  | 'localModelErrorTitle'
   | 'openFolder'
   | 'conflictDialogTitle'
   | 'conflictDialogMessage'
   | 'conflictKeepAll'
   | 'conflictReplaceAll'
   | 'conflictSkipped'
-  | 'localModelHint'
-  | 'localModelReady'
   | 'localModelDownloading'
   | 'localModelError'
-  | 'localModelsNav'
   | 'localModelsTitle'
   | 'localModelsDesc'
-  | 'localModelDownload'
-  | 'localModelRetry'
-  | 'localModelRemove'
   | 'localModelCancel'
-  | 'customRerankTitle'
-  | 'customRerankHint'
-  | 'customRerankAccept'
-  | 'customRerankAdd'
-  | 'officialSupport'
-  | 'experimentalSupport'
-  | 'rerankRevalidate'
-  | 'rerankValidating'
   | 'localRerankTimeoutMs'
   | 'localRerankTimeoutHint'
-  | 'hfMirror'
-  | 'hfMirrorHint'
-  | 'hfMirrorSave'
   | 'newGroup'
   | 'groupName'
   | 'renameGroup'
@@ -299,7 +260,6 @@ export type KnowledgeKey =
   | 'noResults'
   | 'embeddingFailed'
   | 'confirmBulkDelete'
-  | 'noLocalModels'
   | 'lexicalOnly'
   | 'lexicalOnlyHint'
   | 'embeddingNotConfigured'
@@ -335,9 +295,6 @@ export type KnowledgeKey =
   | 'timeMinutes'
   | 'timeHours'
   | 'timeDays'
-  | 'cacheDirPickUnavailable'
-  | 'cacheDirOpenUnavailable'
-  | 'cacheDirMigrated'
   | 'mineruOption'
   | 'mineruHostPlaceholder'
   | 'visionModelPlaceholder'
@@ -359,8 +316,6 @@ export type KnowledgeKey =
   | 'syncUnchanged'
   | 'syncFailed'
   | 'syncNoChanges'
-  | 'statusPollFailed'
-  | 'rerankLastValidated'
   | 'error'
 
 /** Bound translate over the knowledge dictionary. */
@@ -380,26 +335,6 @@ export const zh: Record<KnowledgeKey, string> = {
   processingReused: '复用了已有证据', reparseDocument: '重新解析源文件', rechunkDocument: '复用解析结果重新切块',
   evidence: '结构证据', evidenceEmpty: '此文档没有可用的结构证据。', evidenceNext: '继续读取',
   evidenceBack: '上一段', evidenceRetry: '重新加载',
-  mineruDeployTitle: 'MinerU 本地解析 · 部署预检',
-  mineruDownloadSource: '模型下载源',
-  mineruPythonSource: 'Python 包下载源', mineruPythonSourceHint: '用于独立 MinerU 环境，默认使用官方 PyPI。只接受 HTTPS 地址；修改后请保存并重新预检。', mineruSaveSource: '保存下载源',
-  mineruCurrentInstall: '当前已验证安装目录',
-  mineruPhaseAbsent: '尚未部署', mineruPhaseEnvironment: '准备隔离环境', mineruPhaseProbe: '测试 PDF 解析中', mineruPhaseReady: '已通过解析自检', mineruPhaseInterrupted: '上次任务中断，需重新预检',
-  mineruServiceRunning: '服务运行中', mineruServiceStarting: '服务启动中', mineruServiceStopping: '服务停止中', mineruServiceError: '服务异常', mineruServiceStopped: '服务未运行',
-  mineruCancelTask: '取消当前任务', mineruStart: '启动服务', mineruStop: '停止服务', mineruUse: '设为全局默认解析器', mineruApplied: '已设为全局默认；知识库已有的单独配置仍优先生效。',
-  mineruExternalCopy: '外部模型将复制到独立安装目录，原目录保持只读；免下载不代表免磁盘占用。',
-  mineruPrepare: '准备本地 MinerU', mineruNotNow: '暂不安装', mineruConfirm: '确认安装与下载',
-  pythonDetect: '重新检测环境', pythonPath: 'Python 可执行文件路径', pythonVerify: '验证并记住', pythonChoose: '选择已检测到的解释器', pythonEligible: '可用于尝试部署', pythonMissing: '没有发现可用环境。可填写 Python 可执行文件路径后验证。', pythonLimited: '检测到的环境较多；未显示的环境可手动指定。', pythonHint: '检测不会安装软件。需稳定版 64 位 CPython 3.10–3.14，并包含 venv 和 ensurepip。通过检测不代表 MinerU 依赖或解析已验证。', pythonStages: '部署验证进度', pythonRemembered: '已记住的路径', pythonRefreshHint: '路径已从浏览器设置恢复。部署前请重新检测，确认解释器仍可用。', pythonManualHint: '例如 Windows：C:\\Python313\\python.exe；macOS/Linux：/usr/bin/python3。', pythonOtherDetected: '其他检测到的环境', pythonDetectedDetails: '已检测到的 Python 详情', pythonSource: '发现来源', pythonVersion: '版本', pythonArchitecture: '架构', pythonStepInterpreter: '解释器', pythonStepEnvironment: '隔离环境', pythonStepDependencies: '依赖', pythonStepInference: '真实解析', pythonReasonProbe: '无法启动或读取解释器信息', pythonReasonVersion: '需使用 Python 3.10–3.14', pythonReasonImplementation: '仅支持 CPython', pythonReasonArchitecture: '需 64 位 Python', pythonReasonPrerelease: '需使用正式稳定版', pythonReasonThreaded: '暂不支持自由线程构建', pythonReasonVenv: '缺少 venv 模块', pythonReasonPip: '缺少 ensurepip 模块',
-  mineruManagedPreview: '实验性托管部署：目前仅 Basic / ONNX，使用选定 Python 创建独立环境，不修改原有环境。尚未通过真实模型和跨平台实机验收。Standard/Advanced 暂请使用外部服务。',
-  mineruConfirmPreparation: '将在所选目录创建独立 Python 环境，从 PyPI 安装 MinerU 4.0.6 及依赖，从 Hugging Face 下载固定版本模型，并用公开测试 PDF 自检。运行环境总占用尚不确定，请预留额外空间。请确认接受上游软件与模型各自的许可证；不会自动切换现有解析配置。',
-  mineruDeployDescription: '可选独立部署，不复用向量或重排模型，也不改变现有云 API 配置。Basic 使用 ONNX 解析模型。',
-  mineruDeployRoot: '独立安装目录', mineruDeployExisting: '已有 MinerU 模型目录（可选，只读核验）', mineruDeployBrowse: '选择目录',
-  mineruDeployCheck: '检查路径与容量', mineruDeployChecking: '正在核验文件，请稍候…',
-  mineruDeployTotal: '模型总大小', mineruDeployReuse: '已核验可复用', mineruDeployRemaining: '需下载模型',
-  mineruDeployUnknownRuntime: '以上仅为模型容量。Python、运行环境与依赖占用尚未确定，不包含在此数值中。',
-  mineruDeployIncomplete: '已有模型缺失或摘要不匹配。不会修改该目录，请选择完整模型目录或清空此选项。',
-  mineruDeploySpace: '可用空间不足以完成模型下载与暂存。',
-  mineruDeployPreflightOnly: '部署准备会在独立目录创建 Python 环境、安装 MinerU 并下载模型。知识库当前使用的解析器不会自动切换。',
   sourcePage: '原文第 {page} 页', sourceBlock: '块', sourceRegion: '块区域（归一化坐标）', sourceAsset: '查看附件', sourceUnavailable: '原文位置未知',
   stageQueued: '排队中', stageChecking: '检查服务', stageUploading: '上传至配置服务', stageParsing: '解析中',
   stageDownloading: '下载解析结果', stageNormalizing: '整理结构证据', stageIndexing: '建立索引', stageCompleted: '处理完成', stageFailed: '处理失败', stageCanceled: '已取消',
@@ -446,10 +381,6 @@ export const zh: Record<KnowledgeKey, string> = {
   dragToUpload: '松开上传文件',
   pdfTooLarge: '文件超过 100MB，无法内嵌预览，请右键下载查看',
   pdfPreviewFailed: 'PDF 预览加载失败',
-  ocrTitle: '本地 OCR（扫描件识别）',
-  ocrDesc: '下载 PaddleOCR 模型（约 25MB，完整中文识别）后，扫描版 PDF（无文本层）自动识别出文字并进索引',
-  ocrDownload: '下载 OCR 模型',
-  ocrRemove: '删除 OCR 模型',
   processorBuiltinDesc: '内置处理器：本地解析全部支持格式；扫描件 PDF 在下载 OCR 模型后自动识别（设置 → 本地模型）',
   processorMineruDesc: 'PDF 会上传到配置的 MinerU 云服务，失败可回退本地解析并记录警告。在 mineru.net 获取 API Key。',
   perBaseHint: '留空则使用全局设置',
@@ -569,19 +500,10 @@ export const zh: Record<KnowledgeKey, string> = {
   autoRetrieveHint: '开启后，模型回答事实性问题时自动使用知识库内容，无需显式提到“知识库”；关闭后仅按需调用（knowledge_search 工具 + 显式请求）',
   autoRetrieveWeight: '自动检索权重（每库可注入的分块数，0 = 不参与）',
   autoRetrieveWeightHint: '每个库在一次自动检索注入中最多贡献该数量的分块（0–5，默认 3）；权重高可让该库内容占更多上下文，0 则完全排除该库',
-  localWorkerIdleTimeoutMs: '本地模型 worker 空闲超时（毫秒，0 = 模型常驻）',
-  localWorkerIdleTimeoutMsHint: '本地嵌入模型空闲该时长后会被卸载以释放内存（约 600MB），但 worker 进程保留——onnxruntime 绑定只在进程内加载一次，不会出现 Linux 上的重载失败（Module did not self-register）；下次请求从磁盘重载模型（约 1 秒）。0 = 模型常驻（最快，占用内存）',
   imageCaptionHint: '图表描述（可选）：用视觉模型描述 PDF 中的图片/图表，描述文本可被检索',
   imageCaptionOff: '关闭',
   imageCaptionOpenAI: 'OpenAI 兼容视觉模型',
   imageCaptionOllama: 'Ollama 本地视觉模型',
-  cacheDirTitle: '本地模型缓存目录',
-  cacheDirHint: '嵌入 / 重排 / OCR 模型文件下载到这里（支持 ~ 与 DSH_HOME 变量）。注意：「保存」只切换配置指向、不移动文件；要搬动已有模型请点「迁移模型到此处」。',
-  cacheDirBrowse: '选择文件夹',
-  cacheDirMigrate: '迁移模型到此处',
-  cacheDirOpen: '打开目录',
-  cacheDirSaved: '已保存缓存目录（仅切换配置，文件未移动；如需移动已有模型请点「迁移模型到此处」）',
-  cacheDirMigrateNone: '没有可迁移的模型目录（源与目标相同，或目标目录已存在同名条目）',
   ollamaTitle: 'Ollama 模型',
   ollamaDesc: '通过 Ollama API 下载模型（嵌入、视觉等），下载后可在知识库设置中选用（嵌入提供方选 Ollama）。需先安装并启动 Ollama：https://ollama.com/download',
   ollamaInstalledTitle: '已安装模型（点击名称填入输入框）',
@@ -602,48 +524,24 @@ export const zh: Record<KnowledgeKey, string> = {
   chunkChangeWarning: '分块设置的修改只针对新添加的内容有效',
   topKHint: '每次召回返回的最大文档片段数，越大覆盖越多但消耗更多上下文。',
   thresholdHint: '用于过滤低相关性重排片段的相似度阈值，数值越高召回越严格。',
-  localModelHint: '进程内推理（transformers.js），无需联网服务；首次使用需下载模型权重。模型为 Hugging Face 仓库 id，默认 onnx-community/Qwen3-Embedding-0.6B-ONNX',
   noOllamaModels: '暂无已安装的 Ollama 模型，请在「设置 → Ollama 模型」拉取',
   selectModelPlaceholder: '请选择模型',
   ollamaUnreachable: '无法连接 Ollama（检查地址或是否已启动）',
   embeddingSwitchWarning: '⚠ 切换嵌入模型会使本库已有向量全部失效，保存会被拒绝——请改用「重建知识库」以新模型重建（或先清空本库文档）',
   staleModelSuffix: '（未安装）',
-  embeddingModelMissingHint: '嵌入模型使用本地模型，但尚未下载——导入的内容将无法向量化检索。请先到「设置 → 本地模型」下载嵌入模型（约 585MB）。',
-  localModelStatusLabel: '本地嵌入模型',
-  goToSettings: '去设置',
-  localModelDownloadingTitle: '本地嵌入模型下载中',
-  localModelNotReadyTitle: '本地嵌入模型未就绪',
-  localModelNotReadyHint: '未就绪前导入的内容只能关键词检索，无法向量化。请下载或检查本地模型。',
-  localModelErrorTitle: '本地嵌入模型加载失败',
   openFolder: '打开',
   conflictDialogTitle: '同名文件',
   conflictDialogMessage: '有 {count} 个文件与知识库中已有文件同名，如何处理？',
   conflictKeepAll: '全部重命名（保留两者）',
   conflictReplaceAll: '替换现有',
   conflictSkipped: '个同名文件已跳过（保留现有）',
-  localModelReady: '本地模型就绪',
   localModelDownloading: '模型下载中',
   localModelError: '模型加载失败',
-  localModelsNav: 'Ollama 模型',
   localModelsTitle: 'Ollama 模型与文档处理',
   localModelsDesc: '通过 Ollama API 下载、查看和删除模型，并配置 MinerU 文档解析部署。嵌入提供方请在各知识库的 RAG 配置里选 Ollama。',
-  localModelDownload: '下载',
-  localModelRetry: '重试',
-  localModelRemove: '删除',
   localModelCancel: '取消',
-  customRerankTitle: '高级：添加自定义本地 reranker',
-  customRerankHint: '实验性功能：仅支持无需远程自定义代码、并能返回单 logit 的 Hugging Face ONNX sequence-classification 模型。',
-  customRerankAccept: '我了解自定义模型属于实验性支持，并同意下载后执行本地兼容性自检',
-  customRerankAdd: '添加并验证',
-  officialSupport: '官方支持',
-  experimentalSupport: '实验性',
-  rerankRevalidate: '重新验证',
-  rerankValidating: '正在验证兼容性',
   localRerankTimeoutMs: '本地重排超时（毫秒）',
   localRerankTimeoutHint: '包含排队等待；超时后保留原始检索顺序，并自动隔离卡住的重排进程。',
-  hfMirror: 'Hugging Face 镜像站',
-  hfMirrorHint: '无法直连 huggingface.co 时填镜像地址（如 https://hf-mirror.com），立即生效；留空使用官方源或 HF_ENDPOINT 环境变量。',
-  hfMirrorSave: '保存',
   newGroup: '新建分组',
   groupName: '分组名称',
   renameGroup: '重命名分组',
@@ -691,9 +589,6 @@ export const zh: Record<KnowledgeKey, string> = {
   syncUnchanged: '未变化',
   syncFailed: '失败',
   syncNoChanges: '未检测到变化',
-  statusPollFailed: '状态刷新失败',
-  rerankLastValidated: '最近验证：',
-  noLocalModels: '暂无本地模型',
   lexicalOnly: '仅关键词',
   lexicalOnlyHint: '未配置向量化模型，当前仅关键词检索。点右上角「设置」配置嵌入模型可启用语义检索',
   embeddingNotConfigured: '本知识库未配置向量化，目前仅关键词检索。点「去设置」选择嵌入模型（OpenAI / Ollama / 本地模型），保存后重新索引即可启用语义召回。',
@@ -738,9 +633,6 @@ export const zh: Record<KnowledgeKey, string> = {
   timeMinutes: '{n} 分钟前',
   timeHours: '{n} 小时前',
   timeDays: '{n} 天前',
-  cacheDirPickUnavailable: '文件夹选择不可用（当前环境无目录选择能力）',
-  cacheDirOpenUnavailable: '当前环境不支持打开目录；可手动复制目录路径到文件管理器',
-  cacheDirMigrated: '模型缓存已迁移到 {to}（移动条目：{count}）',
   mineruOption: 'MinerU（云 API，文件将上传）',
   mineruHostPlaceholder: 'API Host（默认 https://mineru.net）',
   visionModelPlaceholder: '视觉模型（如 qwen-vl-plus、gpt-4o-mini）',
@@ -764,26 +656,6 @@ export const en: Record<KnowledgeKey, string> = {
   processingReused: 'Existing evidence reused', reparseDocument: 'Reparse source', rechunkDocument: 'Rechunk saved parsing result',
   evidence: 'Structured evidence', evidenceEmpty: 'No structured evidence is available for this document.', evidenceNext: 'Continue reading',
   evidenceBack: 'Previous excerpt', evidenceRetry: 'Reload',
-  mineruDeployTitle: 'MinerU local parsing · Deployment preflight',
-  mineruDownloadSource: 'Model download source',
-  mineruPythonSource: 'Python package index', mineruPythonSourceHint: 'Used only by the isolated MinerU environment. Defaults to official PyPI. Save and rerun preflight after changing it.', mineruSaveSource: 'Save package source',
-  mineruCurrentInstall: 'Currently verified installation',
-  mineruPhaseAbsent: 'Not deployed', mineruPhaseEnvironment: 'Preparing isolated environment', mineruPhaseProbe: 'Parsing test PDF', mineruPhaseReady: 'Parse self-test passed', mineruPhaseInterrupted: 'Previous task interrupted; run preflight',
-  mineruServiceRunning: 'Service running', mineruServiceStarting: 'Service starting', mineruServiceStopping: 'Service stopping', mineruServiceError: 'Service error', mineruServiceStopped: 'Service stopped',
-  mineruCancelTask: 'Cancel task', mineruStart: 'Start service', mineruStop: 'Stop service', mineruUse: 'Use as global default parser', mineruApplied: 'Global default updated. Existing per-base overrides still take precedence.',
-  mineruExternalCopy: 'External models are copied into managed storage; the source stays read-only. Reusing downloads still requires disk space for the copy.',
-  mineruPrepare: 'Prepare local MinerU', mineruNotNow: 'Not now', mineruConfirm: 'Confirm installation and download',
-  pythonDetect: 'Rescan environments', pythonPath: 'Python executable path', pythonVerify: 'Verify and remember', pythonChoose: 'Choose a detected interpreter', pythonEligible: 'Eligible to attempt setup', pythonMissing: 'No eligible environment found. Enter a Python executable path and verify it.', pythonLimited: 'Discovery reached its limit. Specify other environments manually.', pythonHint: 'Detection does not install software. Requires stable 64-bit CPython 3.10–3.14 with venv and ensurepip. Eligibility does not verify MinerU dependencies or parsing.', pythonStages: 'Deployment validation', pythonRemembered: 'Remembered path', pythonRefreshHint: 'Restored from browser settings. Rescan before deployment to confirm the interpreter is still available.', pythonManualHint: 'For example: C:\\Python313\\python.exe or /usr/bin/python3.', pythonOtherDetected: 'Other detected environments', pythonDetectedDetails: 'Detected Python details', pythonSource: 'Source', pythonVersion: 'Version', pythonArchitecture: 'Architecture', pythonStepInterpreter: 'Interpreter', pythonStepEnvironment: 'Isolated environment', pythonStepDependencies: 'Dependencies', pythonStepInference: 'Real parsing', pythonReasonProbe: 'Could not start interpreter or read its details', pythonReasonVersion: 'Python 3.10–3.14 required', pythonReasonImplementation: 'CPython only', pythonReasonArchitecture: '64-bit Python required', pythonReasonPrerelease: 'Stable release required', pythonReasonThreaded: 'Free-threaded builds are not supported', pythonReasonVenv: 'venv module is missing', pythonReasonPip: 'ensurepip module is missing',
-  mineruManagedPreview: 'Experimental managed deployment: Basic / ONNX only. Creates an isolated environment from the selected Python without modifying existing environments. Real-model and cross-platform acceptance are pending. Use an external service for Standard/Advanced.',
-  mineruConfirmPreparation: 'Creates an isolated Python environment in the chosen directory, installs MinerU 4.0.6 and dependencies from PyPI, downloads pinned models from Hugging Face, and parses a public test PDF. Total runtime size is unknown; allow additional disk space. Confirm acceptance of upstream software and model licenses. Existing parser settings will not switch automatically.',
-  mineruDeployDescription: 'Optional isolated deployment. Embedding and reranking models are separate, and existing cloud API settings stay unchanged. Basic uses ONNX parsing models.',
-  mineruDeployRoot: 'Dedicated installation directory', mineruDeployExisting: 'Existing MinerU model directory (optional, read-only verification)', mineruDeployBrowse: 'Choose directory',
-  mineruDeployCheck: 'Check paths and capacity', mineruDeployChecking: 'Verifying files…',
-  mineruDeployTotal: 'Total model size', mineruDeployReuse: 'Verified reusable', mineruDeployRemaining: 'Model download remaining',
-  mineruDeployUnknownRuntime: 'Model files only. Python, runtime and dependency sizes are not yet known and are not included above.',
-  mineruDeployIncomplete: 'Existing model files are missing or do not match their fingerprints. This directory will not be modified; choose a complete model directory or clear this option.',
-  mineruDeploySpace: 'Insufficient space for model downloads and staging.',
-  mineruDeployPreflightOnly: 'Preparation creates a Python environment in the dedicated directory, installs MinerU, and downloads its models. The parser currently used by your knowledge base will not switch automatically.',
   sourcePage: 'Source page {page}', sourceBlock: 'Block', sourceRegion: 'Block region (normalized coordinates)', sourceAsset: 'View asset', sourceUnavailable: 'Source location unknown',
   stageQueued: 'Queued', stageChecking: 'Checking service', stageUploading: 'Uploading to configured service', stageParsing: 'Parsing',
   stageDownloading: 'Downloading results', stageNormalizing: 'Normalizing evidence', stageIndexing: 'Indexing', stageCompleted: 'Completed', stageFailed: 'Failed', stageCanceled: 'Canceled',
@@ -830,10 +702,6 @@ export const en: Record<KnowledgeKey, string> = {
   dragToUpload: 'Drop to upload',
   pdfTooLarge: 'File exceeds 100MB — cannot preview inline; download it to view',
   pdfPreviewFailed: 'Failed to load PDF preview',
-  ocrTitle: 'Local OCR (scanned documents)',
-  ocrDesc: 'Download the PaddleOCR models (~25MB, full Chinese recognition); scanned PDFs (no text layer) are then OCRed automatically and indexed',
-  ocrDownload: 'Download OCR models',
-  ocrRemove: 'Remove OCR models',
   processorBuiltinDesc: 'Built-in processor: parses every supported format locally; scanned PDFs are OCRed automatically once the OCR models are downloaded (Settings → Local Models)',
   processorMineruDesc: 'PDFs are uploaded to the configured MinerU cloud service. Failures may fall back to local parsing with a recorded warning. Get an API key at mineru.net.',
   perBaseHint: 'Leave empty to use global settings',
@@ -953,19 +821,10 @@ export const en: Record<KnowledgeKey, string> = {
   autoRetrieveHint: 'When on, the model automatically uses knowledge-base content for factual questions without an explicit "knowledge base" mention; when off, only on-demand calls (knowledge_search tool + explicit requests)',
   autoRetrieveWeight: 'Auto-retrieve weight (chunks this base may contribute, 0 = excluded)',
   autoRetrieveWeightHint: 'A base contributes at most this many chunks per auto-retrieve injection (0–5, default 3); higher lets its content take more context, 0 excludes it entirely',
-  localWorkerIdleTimeoutMs: 'Local-model worker idle timeout (ms, 0 = keep models hot)',
-  localWorkerIdleTimeoutMsHint: 'After this much idle time the local model is UNLOADED to free memory (~600MB) but the worker process stays alive — the onnxruntime binding is loaded once per process, so the Linux respawn failure ("Module did not self-register") cannot occur; the next request reloads from disk (~1s). 0 = keep models hot (fastest, costs resident memory)',
   imageCaptionHint: 'Image/table captioning (optional): a vision model describes embedded PDF figures so charts become searchable',
   imageCaptionOff: 'Off',
   imageCaptionOpenAI: 'OpenAI-compatible vision model',
   imageCaptionOllama: 'Ollama local vision model',
-  cacheDirTitle: 'Local model cache directory',
-  cacheDirHint: 'Embedding / rerank / OCR model files download here (~ and DSH_HOME are expanded). Note: "Save" only points the config here — it does NOT move files; use "Migrate models here" to move existing models.',
-  cacheDirBrowse: 'Pick folder',
-  cacheDirMigrate: 'Migrate models here',
-  cacheDirOpen: 'Open folder',
-  cacheDirSaved: 'Cache directory saved (config only, files not moved; use "Migrate models here" to move existing models)',
-  cacheDirMigrateNone: 'Nothing to migrate (source equals target, or the target already has the same entries)',
   ollamaTitle: 'Ollama models',
   ollamaDesc: 'Pull models through the Ollama API (embeddings, VLMs); pulled models are selectable in the base settings (provider: Ollama). Requires Ollama to be installed and running: https://ollama.com/download',
   ollamaInstalledTitle: 'Installed models (click a name to fill the input)',
@@ -986,48 +845,24 @@ export const en: Record<KnowledgeKey, string> = {
   chunkChangeWarning: 'Chunking changes only apply to newly added content',
   topKHint: 'Maximum number of document chunks returned for each retrieval. Higher values cover more content but use more context.',
   thresholdHint: 'Similarity threshold used to filter low-relevance reranked chunks; higher is stricter.',
-  localModelHint: 'In-process inference (transformers.js), no server needed; first use downloads the weights. Model = Hugging Face repo id, default onnx-community/Qwen3-Embedding-0.6B-ONNX',
   noOllamaModels: 'No installed Ollama models — pull one in Settings → Ollama Models',
   selectModelPlaceholder: 'Select a model',
   ollamaUnreachable: 'Cannot reach Ollama (check the address or whether it is running)',
   embeddingSwitchWarning: '⚠ Switching the embedding model invalidates this base\'s stored vectors, so the save will be refused — rebuild via \u201cRebuild base\u201d with the new model instead (or empty the base first)',
   staleModelSuffix: ' (not installed)',
-  embeddingModelMissingHint: 'The embedding provider is the local model, which is not downloaded yet — imported content cannot be vectorized for retrieval. Download the embedding model (~585MB) in Settings → Local Models first.',
-  localModelStatusLabel: 'Local embedding model',
-  goToSettings: 'Settings',
-  localModelDownloadingTitle: 'Downloading the local embedding model',
-  localModelNotReadyTitle: 'Local embedding model not ready',
-  localModelNotReadyHint: 'Until it is ready, imports are keyword-searchable only. Download or check the local model.',
-  localModelErrorTitle: 'Local embedding model failed to load',
   openFolder: 'Open',
   conflictDialogTitle: 'Same-name files',
   conflictDialogMessage: '{count} files share a name with items already in this base. How to proceed?',
   conflictKeepAll: 'Rename all (keep both)',
   conflictReplaceAll: 'Replace existing',
   conflictSkipped: 'same-name file(s) skipped (existing kept)',
-  localModelReady: 'Local model ready',
   localModelDownloading: 'Downloading model',
   localModelError: 'Model load failed',
-  localModelsNav: 'Ollama Models',
   localModelsTitle: 'Ollama models & document processing',
   localModelsDesc: 'Pull, inspect and delete models through the Ollama API, and configure the MinerU document-parsing deployment. Pick Ollama as the embedding provider in each base\'s RAG settings.',
-  localModelDownload: 'Download',
-  localModelRetry: 'Retry',
-  localModelRemove: 'Remove',
   localModelCancel: 'Cancel',
-  customRerankTitle: 'Advanced: add a custom local reranker',
-  customRerankHint: 'Experimental: only Hugging Face ONNX sequence-classification models that need no remote custom code and return one logit are supported.',
-  customRerankAccept: 'I understand custom models are experimental and agree to run a local compatibility check after download',
-  customRerankAdd: 'Add and validate',
-  officialSupport: 'Official support',
-  experimentalSupport: 'Experimental',
-  rerankRevalidate: 'Revalidate',
-  rerankValidating: 'Validating compatibility',
   localRerankTimeoutMs: 'Local rerank timeout (ms)',
   localRerankTimeoutHint: 'Includes queue wait. On timeout, retrieval order is preserved and the stuck rerank process is isolated.',
-  hfMirror: 'Hugging Face mirror',
-  hfMirrorHint: 'When huggingface.co is unreachable, set a mirror (e.g. https://hf-mirror.com); takes effect immediately. Empty = official hub or the HF_ENDPOINT env var.',
-  hfMirrorSave: 'Save',
   newGroup: 'New group',
   groupName: 'Group name',
   renameGroup: 'Rename group',
@@ -1075,9 +910,6 @@ export const en: Record<KnowledgeKey, string> = {
   syncUnchanged: 'Unchanged',
   syncFailed: 'Failed',
   syncNoChanges: 'No changes detected',
-  statusPollFailed: 'Status refresh failed',
-  rerankLastValidated: 'Last validated: ',
-  noLocalModels: 'No local models yet',
   lexicalOnly: 'Lexical only',
   lexicalOnlyHint: 'No embedding model configured — search is lexical only. Use the Settings button (top right) to configure an embedding model and enable semantic retrieval.',
   embeddingNotConfigured: 'This base has no embedding configured, so search is lexical only. Open Settings to pick an embedding model (OpenAI / Ollama / local), save, then reindex to enable semantic recall.',
@@ -1122,9 +954,6 @@ export const en: Record<KnowledgeKey, string> = {
   timeMinutes: '{n} min ago',
   timeHours: '{n} h ago',
   timeDays: '{n} d ago',
-  cacheDirPickUnavailable: 'Folder picking is unavailable (this environment has no directory picker)',
-  cacheDirOpenUnavailable: 'Opening folders is unavailable in this environment; copy the path into your file manager',
-  cacheDirMigrated: 'Model cache migrated to {to} ({count} entries moved)',
   mineruOption: 'MinerU (cloud API, uploads files)',
   mineruHostPlaceholder: 'API Host (default https://mineru.net)',
   visionModelPlaceholder: 'Vision model (e.g. qwen-vl-plus, gpt-4o-mini)',

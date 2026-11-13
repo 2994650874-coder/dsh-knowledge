@@ -33,6 +33,55 @@ export interface ChangelogEntry {
 /** Newest first. */
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: '2026-11-14',
+    area: '安装',
+    title: '改为 link 安装，重装不再覆盖本地改动',
+    detail: '插件不再从 npm 装实体副本，而是直接指向源码目录（link）。宿主需要的包改由本地副本提供。',
+    effect: '插件市场更新或重装这个插件时，本地改动不会再被原版覆盖。',
+  },
+  {
+    date: '2026-11-14',
+    area: '精简',
+    title: '移除本地模型与 OCR 管理',
+    detail: '设置页里「下载本地嵌入模型」「本地 OCR 模型」两块整体移除，连同下拉里「本地模型」这个嵌入方式一起删掉。',
+    effect: '嵌入方式只剩 无 / OpenAI / Ollama 三种，不再出现选了会报错的选项。',
+  },
+  {
+    date: '2026-11-14',
+    area: '精简',
+    title: '移除 MinerU 部署',
+    detail: '设置页里「MinerU 本地解析 · 部署预检」整块移除，包括它配套的 Python 环境检测。',
+    effect: '设置页只剩 Ollama 一块内容。txt/markdown 走内置解析，不受影响。',
+  },
+  {
+    date: '2026-11-14',
+    area: '设置',
+    title: '配置入口移到「插件 → 设置 → 知识库」',
+    detail: '不再占用官方设置页，改为注册到插件页自己的配置区（与翻译插件、grokbot 一致）。',
+    effect: '设置页里不再有「知识库」这一项，到插件页里找知识库的配置。',
+  },
+  {
+    date: '2026-11-14',
+    area: '依赖',
+    title: '运行依赖从 15 个减到 2 个',
+    detail: 'PDF、Word、OCR、本地嵌入相关的库全部从依赖声明中移除，只留解压与网络两个。',
+    effect: '插件体积与安装内容显著变小，txt/markdown 与 Ollama 嵌入不受影响。',
+  },
+  {
+    date: '2026-11-14',
+    area: '状态',
+    title: '嵌入完成后进度不再卡住',
+    detail: '任务结束时行状态长时间停在「嵌入中 0%」，要切一次知识库才刷新。',
+    effect: '向量化一完成，那一行立刻变成「✓ 就绪」。',
+  },
+  {
+    date: '2026-11-14',
+    area: '状态',
+    title: '进度轮询不再造成整表闪烁',
+    detail: '轮询每 800ms 无条件刷新整个文档表，即使数据没变，导致行内转圈动画反复重启。',
+    effect: '只有进度真的跳变时才刷新那一行，空闲时不重渲染。',
+  },
+  {
     date: '2026-11-03',
     area: '面板',
     title: '标题栏去掉版本标签',
